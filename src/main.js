@@ -14,6 +14,7 @@ import { PlayerState } from './player/playerState.js';
 import { Weapon } from './weapons/weapon.js';
 import { Viewmodel } from './weapons/viewmodel.js';
 import { resolveShot } from './weapons/hitscan.js';
+import { BotManager } from './bots/botManager.js';
 
 const status = document.getElementById('boot-status');
 const canvas = document.getElementById('game-canvas');
@@ -36,15 +37,20 @@ const firstSpawn = { x: spawn[0], z: spawn[1] };
 const controller = new PlayerController(engine.camera, input, map.colliders, firstSpawn);
 engine.scene.add(controller.yawObject);
 const player = new PlayerState();
+controller.state = player; // bots read the player's combat state via the controller
+
+// Bots: a squad of CT bots patrol the map, engage the T player on line-of-sight,
+// and take hits from the player's hitscan. They are the round's enemy team.
+const botManager = new BotManager(engine.scene, map.spawns);
 
 // Weapons: start on the pistol (key 1); key 2 swaps to the rifle. Every shot is
-// resolved against the map — bot targets arrive in P0-6, so it is [] for now.
+// resolved against the map and the bot targets.
 const weapon = new Weapon('pistol');
 const viewmodel = new Viewmodel(engine.camera, controller);
-events.on('shot', (p) => resolveShot(p.origin, p.dir, map.colliders, [], p.weapon));
+events.on('shot', (p) => resolveShot(p.origin, p.dir, map.colliders, botManager.targets(), p.weapon));
 
 window.__game = {
-  engine, input, events, map, controller, player, weapon, viewmodel,
+  engine, input, events, map, controller, player, weapon, viewmodel, botManager,
   three: THREE.REVISION,
 };
 
@@ -54,9 +60,10 @@ engine.start((dt) => {
   if (input.locked) {
     controller.update(dt, input, map.colliders);
     weapon.update(dt, input, engine.camera);
+    botManager.update(dt, controller, map.colliders);
      }
   viewmodel.update(dt);
   input.endFrame();
 });
 
-status.textContent = `three r${THREE.REVISION} — P0-5 weapons (1/2 switch, R reload, click to play)`;
+status.textContent = `three r${THREE.REVISION} — P0-6 bots (4 CT bots patrol and engage the T player)`;
