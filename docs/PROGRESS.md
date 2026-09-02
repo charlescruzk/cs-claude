@@ -3,7 +3,7 @@
 Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked after two
 attempts (write what you tried). Add a one-line note per task.
 
-- [ ] P0-1 Engine core and frame loop —
+- [x] P0-1 Engine core and frame loop — Engine (renderer/scene/cam/clock/resize + `requestAnimationFrame` loop, dt clamped to 0.1s, hemisphere+directional light, 50×50 ground + test cube, `clearTestWorld()` for P0-3); EventBus with shared `events`; main.js wires engine + `window.__game`.
 - [ ] P0-2 Input and pointer lock —
 - [ ] P0-3 Map data and blockout builder —
 - [ ] P0-4 Player controller with collision —
