@@ -15,6 +15,39 @@
     #lock-overlay.hidden { display: none; }
     #boot-status { position: fixed; left: 12px; top: 12px; font: 12px/1.4 monospace;
                    color: #9f9; opacity: .8; }
+    /* --- HUD (P0-7) --- */
+    #hud > * { position: absolute; }
+    #vignette { inset: 0; pointer-events: none; opacity: 0;
+                background: radial-gradient(ellipse at center, rgba(255,0,0,0) 45%,
+                              rgba(160,0,0,.55) 100%); transition: opacity .08s linear; }
+    /* Crosshair: four bars pushed out from center by the current spread. */
+    #crosshair { inset: 0; }
+    #crosshair .ch { position: absolute; left: 50%; top: 50%;
+                     background: rgba(0,255,160,.9); box-shadow: 0 0 1px #000; }
+    #crosshair .up, #crosshair .down { width: 2px; height: 8px; }
+    #crosshair .left, #crosshair .right { width: 8px; height: 2px; }
+    #timer { top: 12px; left: 50%; transform: translateX(-50%);
+             font: 700 22px/1 monospace; letter-spacing: .04em; text-shadow: 0 0 4px #000; }
+    #killfeed { top: 12px; right: 12px; text-align: right;
+                font: 13px/1.5 monospace; }
+    #killfeed .kf { opacity: 1; transition: opacity 1s linear; white-space: nowrap;
+                    text-shadow: 0 0 3px #000; }
+    #status { left: 20px; bottom: 18px; font: 13px/1.5 monospace; }
+    #status .row { display: flex; align-items: baseline; gap: 8px; }
+    #status .num { font: 700 28px/1 monospace; min-width: 42px; text-align: right;
+                   text-shadow: 0 0 4px #000; }
+    #status .bar { width: 220px; height: 6px; background: rgba(255,255,255,.15); }
+    #status .bar > i { display: block; height: 100%; transition: width .15s linear; }
+    #health-bar { background: #34d15b; }
+    #armor-bar { background: #5b9bd1; }
+    #status .lbl { width: 46px; text-transform: uppercase; letter-spacing: .08em;
+                   opacity: .8; font-size: 11px; }
+    #ammo { right: 20px; bottom: 18px; text-align: right;
+            font: 13px/1.5 monospace; text-shadow: 0 0 3px #000; }
+    #ammo .wpn { font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+                 opacity: .8; }
+    #ammo .counts { font: 700 30px/1 monospace; }
+    #ammo .counts .res { font-size: 16px; opacity: .7; }
   </style>
   <script type="importmap">
   {
@@ -27,7 +60,30 @@
 </head>
 <body>
   <canvas id="game-canvas"></canvas>
-  <div id="hud"></div>
+  <div id="hud">
+   <div id="vignette"></div>
+   <div id="crosshair">
+      <div class="ch up"></div>
+      <div class="ch down"></div>
+      <div class="ch left"></div>
+      <div class="ch right"></div>
+   </div>
+   <div id="timer">1:55</div>
+   <div id="killfeed"></div>
+   <div id="status">
+      <div class="row"><span class="lbl">HP</span>
+         <span class="num" id="health-num">100</span>
+         <span class="bar"><i id="health-bar"></i></span></div>
+      <div class="row"><span class="lbl">ARM</span>
+         <span class="num" id="armor-num">0</span>
+         <span class="bar"><i id="armor-bar"></i></span></div>
+   </div>
+   <div id="ammo">
+      <div class="wpn" id="weapon-name">Pistol</div>
+      <div class="counts"><span id="mag">12</span>
+         <span class="res">/ <span id="reserve">100</span></span></div>
+   </div>
+</div>
   <div id="lock-overlay">Click to play</div>
   <div id="boot-status">booting…</div>
   <script type="module" src="./src/main.js"></script>

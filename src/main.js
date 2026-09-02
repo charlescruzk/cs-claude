@@ -15,6 +15,7 @@ import { Weapon } from './weapons/weapon.js';
 import { Viewmodel } from './weapons/viewmodel.js';
 import { resolveShot } from './weapons/hitscan.js';
 import { BotManager } from './bots/botManager.js';
+import { Hud } from './hud/hud.js';
 
 const status = document.getElementById('boot-status');
 const canvas = document.getElementById('game-canvas');
@@ -49,8 +50,14 @@ const weapon = new Weapon('pistol');
 const viewmodel = new Viewmodel(engine.camera, controller);
 events.on('shot', (p) => resolveShot(p.origin, p.dir, map.colliders, botManager.targets(), p.weapon));
 
+// HUD: reads live player/weapon/round state each frame and reacts to hit/kill.
+// `round` is a stand-in countdown for P0-7; P0-8 replaces it with the round loop.
+const round = { time: 115 };
+const hud = new Hud();
+
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
+  hud, round,
   three: THREE.REVISION,
 };
 
@@ -61,9 +68,11 @@ engine.start((dt) => {
     controller.update(dt, input, map.colliders);
     weapon.update(dt, input, engine.camera);
     botManager.update(dt, controller, map.colliders);
+    round.time = Math.max(0, round.time - dt);
      }
   viewmodel.update(dt);
+  hud.update(dt, { player, weapon, round, spread: weapon.currentSpread });
   input.endFrame();
 });
 
-status.textContent = `three r${THREE.REVISION} — P0-6 bots (4 CT bots patrol and engage the T player)`;
+status.textContent = `three r${THREE.REVISION} — P0-7 HUD (crosshair, health/armor, ammo, timer, feed)`;
