@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cs-browser</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+                 font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #fff; }
+    #game-canvas { display: block; width: 100vw; height: 100vh; }
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    #lock-overlay { position: fixed; inset: 0; display: flex; align-items: center;
+                    justify-content: center; background: rgba(0,0,0,.6);
+                    font-size: 28px; letter-spacing: .05em; cursor: pointer; }
+    #lock-overlay.hidden { display: none; }
+    #boot-status { position: fixed; left: 12px; top: 12px; font: 12px/1.4 monospace;
+                   color: #9f9; opacity: .8; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="hud"></div>
+  <div id="lock-overlay">Click to play</div>
+  <div id="boot-status">booting…</div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

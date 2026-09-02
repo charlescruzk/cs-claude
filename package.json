@@ -1,0 +1,11 @@
+{
+  "name": "cs-browser",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Counter-Strike 1.6-style browser FPS, P0 build",
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 8080 --bind 127.0.0.1",
+    "check": "node scripts/check.mjs"
+  }
+}
