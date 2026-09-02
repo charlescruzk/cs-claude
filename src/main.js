@@ -1,12 +1,15 @@
-// Entry point. P0-3 swaps the P0-1 test cube for the blockout map and parks the
-// camera on a T spawn so the map is visible on load. The loop still only drives
-// input; the player controller takes over the camera in P0-4.
+// Entry point. P0-4 adds the player controller: it owns the camera via a yaw rig,
+// moves with collision against the map, and spawns at a random T spawn. The loop
+// only drives the player while the pointer is locked (the overlay is the "paused"
+// state). Weapons, bots, and the round loop arrive in later tasks.
 import * as THREE from 'three';
 import { Engine } from './core/engine.js';
 import { Input } from './core/input.js';
 import { events } from './core/events.js';
 import { mapData } from './map/mapData.js';
 import { buildMap } from './map/mapBuilder.js';
+import { PlayerController } from './player/playerController.js';
+import { PlayerState } from './player/playerState.js';
 
 const status = document.getElementById('boot-status');
 const canvas = document.getElementById('game-canvas');
@@ -18,21 +21,25 @@ const input = new Input(canvas);
 overlay.addEventListener('click', () => input.requestLock());
 input._onLockChange = (locked) => overlay.classList.toggle('hidden', locked);
 
-// Replace the P0-1 placeholder with the blockout map.
+// Build the blockout and drop the P0-1 test cube.
 engine.clearTestWorld();
 const map = buildMap(mapData, engine.scene);
 
-// Static camera on a T spawn, looking into the map (P0-4 replaces this with look).
-engine.camera.position.set(0, 1.6, -24);
-engine.camera.lookAt(0, 1.6, 0);
+// Player: spawn the controller at a random T spawn and give it the map colliders.
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const spawn = pick(map.spawns.t); // one [x, z] pair
+const firstSpawn = { x: spawn[0], z: spawn[1] };
+const controller = new PlayerController(engine.camera, input, map.colliders, firstSpawn);
+engine.scene.add(controller.yawObject);
+const player = new PlayerState();
 
-window.__game = { engine, input, events, map, three: THREE.REVISION };
+window.__game = { engine, input, events, map, controller, player, three: THREE.REVISION };
 
 engine.start((dt) => {
   input.beginFrame();
-    // P0-3: map is built and rendered; no systems update yet.
-  void dt;
+   // Only move while locked; the overlay-up state is effectively paused.
+  if (input.locked) controller.update(dt, input, map.colliders);
   input.endFrame();
 });
 
-status.textContent = `three r${THREE.REVISION} — P0-3 map built (${map.colliders.length} colliders)`;
+status.textContent = `three r${THREE.REVISION} — P0-4 player moving (WASD/mouse, click to play)`;
