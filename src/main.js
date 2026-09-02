@@ -1,7 +1,8 @@
-// Entry point. P0-4 adds the player controller: it owns the camera via a yaw rig,
-// moves with collision against the map, and spawns at a random T spawn. The loop
-// only drives the player while the pointer is locked (the overlay is the "paused"
-// state). Weapons, bots, and the round loop arrive in later tasks.
+// Entry point. Wires engine, input, map, player, and weapons together and runs the
+// frame loop. The player controller owns the camera (a yaw rig) and moves with
+// collision; the weapon fires on click and each shot is resolved by a hitscan
+// against the map. The loop only drives the player/weapon while the pointer is
+// locked (the overlay is the "paused" state). Bots and the round loop arrive next.
 import * as THREE from 'three';
 import { Engine } from './core/engine.js';
 import { Input } from './core/input.js';
@@ -10,6 +11,9 @@ import { mapData } from './map/mapData.js';
 import { buildMap } from './map/mapBuilder.js';
 import { PlayerController } from './player/playerController.js';
 import { PlayerState } from './player/playerState.js';
+import { Weapon } from './weapons/weapon.js';
+import { Viewmodel } from './weapons/viewmodel.js';
+import { resolveShot } from './weapons/hitscan.js';
 
 const status = document.getElementById('boot-status');
 const canvas = document.getElementById('game-canvas');
@@ -33,13 +37,26 @@ const controller = new PlayerController(engine.camera, input, map.colliders, fir
 engine.scene.add(controller.yawObject);
 const player = new PlayerState();
 
-window.__game = { engine, input, events, map, controller, player, three: THREE.REVISION };
+// Weapons: start on the pistol (key 1); key 2 swaps to the rifle. Every shot is
+// resolved against the map — bot targets arrive in P0-6, so it is [] for now.
+const weapon = new Weapon('pistol');
+const viewmodel = new Viewmodel(engine.camera, controller);
+events.on('shot', (p) => resolveShot(p.origin, p.dir, map.colliders, [], p.weapon));
+
+window.__game = {
+  engine, input, events, map, controller, player, weapon, viewmodel,
+  three: THREE.REVISION,
+};
 
 engine.start((dt) => {
   input.beginFrame();
    // Only move while locked; the overlay-up state is effectively paused.
-  if (input.locked) controller.update(dt, input, map.colliders);
+  if (input.locked) {
+    controller.update(dt, input, map.colliders);
+    weapon.update(dt, input, engine.camera);
+     }
+  viewmodel.update(dt);
   input.endFrame();
 });
 
-status.textContent = `three r${THREE.REVISION} — P0-4 player moving (WASD/mouse, click to play)`;
+status.textContent = `three r${THREE.REVISION} — P0-5 weapons (1/2 switch, R reload, click to play)`;

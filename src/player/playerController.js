@@ -32,6 +32,7 @@ export class PlayerController {
     this.eye = STAND_EYE;
     this.yaw = 0;
     this.pitch = 0;
+    this.recoil = 0; // view kick added to pitch; the viewmodel eases it back
     this.frozen = false; // set by the round loop during freeze
     this.disabled = false; // set when the player dies
 
@@ -135,6 +136,6 @@ export class PlayerController {
     this.yawObject.position.set(this.pos.x, this.pos.y, this.pos.z);
     this.yawObject.rotation.y = this.yaw;
     this.camera.position.set(0, this.eye, 0);
-    this.camera.rotation.x = this.pitch;
+    this.camera.rotation.x = this.pitch + this.recoil;
     }
 }
