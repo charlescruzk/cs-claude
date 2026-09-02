@@ -4,7 +4,7 @@ Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked afte
 attempts (write what you tried). Add a one-line note per task.
 
 - [x] P0-1 Engine core and frame loop — Engine (renderer/scene/cam/clock/resize + `requestAnimationFrame` loop, dt clamped to 0.1s, hemisphere+directional light, 50×50 ground + test cube, `clearTestWorld()` for P0-3); EventBus with shared `events`; main.js wires engine + `window.__game`.
-- [ ] P0-2 Input and pointer lock —
+- [x] P0-2 Input and pointer lock — `Input` (keys Set, mouseDX/DY accumulated per frame, 3-button `mouseDown`, `justPressed` edge detection, pointer lock on overlay click, `locked` flag, begin/endFrame resets). `#lock-overlay` was already scaffolded in index.html; wired its show/hide to the lock state in main.js.
 - [ ] P0-3 Map data and blockout builder —
 - [ ] P0-4 Player controller with collision —
 - [ ] P0-5 Weapons: data, firing, hitscan, viewmodel —
@@ -15,7 +15,8 @@ attempts (write what you tried). Add a one-line note per task.
 
 ## Decisions made along the way
 
-(Record any ambiguity you resolved and the option you chose.)
+- P0-2: `#lock-overlay` (and its CSS) was already present in the scaffold's index.html, so P0-2 only wired its show/hide to the pointer-lock state rather than adding the div. No index.html edit was needed.
+- P0-2: `justPressed` is edge-triggered via a `_downCodes` set; mouse "just down" is handled by the weapon's own `prevTrigger` flag (P0-5), so `Input` only tracks per-key edges.
 
 ## Known issues
 
