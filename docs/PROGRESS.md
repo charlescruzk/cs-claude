@@ -134,8 +134,19 @@ CDP port 9333 and mask a fresh spawn — kill leftover probe chromes before runn
     `+300` per player kill, `+100` for a headshot. **Verified:** `check` 24/24; probe
     clean — `kevlarHalved/armorAbsorbed/headshotBypass/moneyOnKill/moneyOnHeadshot/
     moneyPersists/armorPersists` all true.
-- [ ] P1-4 Freeze-phase buy menu
-- [ ] P1-4 Freeze-phase buy menu
+- [x] P1-4 Freeze-phase buy menu — `src/hud/buyMenu.js` `BuyMenu(player, weapon,
+    round, input)` on the scoreboard overlay pattern: `B` (`justPressed('KeyB')`)
+    toggles a centered `#buy-menu` panel while `round.state==='freeze'`; items
+    `Kevlar` 250 → `armor=100`, `Kevlar + Helmet` 650 → `armor=100` + `helmet`,
+    `Magazine Pack` 100 → `weapon.current.reserve = weapon.def.reserve`. Each
+    `{name,cost,apply()}`; unaffordable items grey/disabled and un-clickable, a
+    live money readout, buying deducts + applies in place. Opening releases pointer
+    lock (`input.canvas.exitPointerLock()`) so the mouse can click; closing re-requests
+    it (best-effort — a browser may need a click gesture). `update(dt,input)` runs
+    **outside** the locked block in main.js so it stays live while its lock release
+    is up, and auto-closes on `live`. index.html adds the `#buy-menu` shell + CSS.
+    **Verified:** `check` 25/25; probe clean — `opensInFreeze/kevlarArmor/kevlarMoney/
+    kevGreyed/magOk/unclickable/inertOutsideFreeze/closesOnLive` all true.
 - [ ] P1-5 Thrown projectiles (frag + flash)
 - [ ] P1-6 Tactical effects
 - [ ] P1-7 HUD integration + polish
@@ -182,4 +193,20 @@ CDP port 9333 and mask a fresh spawn — kill leftover probe chromes before runn
 === BEHAVIOR (P1-3 econ) ===
 { kevlarHalved:true, armorAbsorbed:true, headshotBypass:true,
   moneyOnKill:true, moneyOnHeadshot:true, moneyPersists:true, armorPersists:true }
+```
+
+### P1-4 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-4 buy) ===
+{ opensInFreeze:true, kevlarArmor:true, kevlarMoney:true,
+  kevGreyed:true, magOk:true, unclickable:true,
+  inertOutsideFreeze:true, closesOnLive:true }
 ```

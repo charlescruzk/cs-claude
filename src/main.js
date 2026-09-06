@@ -17,6 +17,7 @@ import { resolveShot } from './weapons/hitscan.js';
 import { BotManager } from './bots/botManager.js';
 import { Hud } from './hud/hud.js';
 import { Scoreboard } from './hud/scoreboard.js';
+import { BuyMenu } from './hud/buyMenu.js';
 import { Round } from './game/round.js';
 import { spawnFor } from './game/teams.js';
 import { debugEnabled, makeFpsCounter, makeColliderBoxes } from './core/debug.js';
@@ -92,10 +93,13 @@ const hud = new Hud();
 // Scoreboard: a Tab-held overlay of team scores and per-participant K/D, plus the
 // result banner shown during the end state.
 const scoreboard = new Scoreboard({ bots: botManager, round });
+// Buy menu: a freeze-phase panel (B) for Kevlar / Kevlar+Helmet / Magazine Pack.
+// It runs outside the locked block so it works while its pointer-lock release is up.
+const buyMenu = new BuyMenu(player, weapon, round, input);
 
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
-  hud, round, scoreboard,
+  hud, round, scoreboard, buyMenu,
   three: THREE.REVISION,
 };
 
@@ -116,6 +120,8 @@ engine.start((dt) => {
   viewmodel.update(dt);
   scoreboard.update(dt, input);
   hud.update(dt, { player, weapon, round, spread: weapon.currentSpread, scoped: weapon.scoped });
+  // The buy menu runs unlocked so it stays live while its pointer-lock release is up.
+  buyMenu.update(dt, input);
   input.endFrame();
   fps(dt);
 });

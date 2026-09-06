@@ -207,6 +207,41 @@ async function main() {
     });
    console.log('\n=== BEHAVIOR (P1-3 econ) ===');
    console.log(econ && econ.result ? econ.result.value : '(econ eval failed)');
+
+         // P1-4 buy menu: B opens the panel in freeze; buying Kevlar shows armor
+         // 100 and deducts 250; unaffordable items grey out; the panel is inert
+         // outside freeze and auto-closes on live. Proven without a code change.
+   const buy = await send('Runtime.evaluate', {
+     expression: `(() => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const p = g.player, wm = g.buyMenu, r = g.round, inp = g.input;
+        r.state = 'freeze'; wm.close();
+        inp._pressed.clear(); inp._pressed.add('KeyB');
+        wm.update(0.016, inp);
+        out.opensInFreeze = wm.panel.style.display !== 'none';
+        p.money = 800; p.armor = 0;
+        wm._buy(wm.items[0]);
+        out.kevlarArmor = p.armor === 100;
+        out.kevlarMoney = p.money === 550;
+        p.money = 100; wm._refresh();
+        out.kevGreyed = wm.items[0].button.disabled;      // 100 < 250
+        out.magOk = !wm.items[2].button.disabled;          // 100 >= 100
+        const m = p.money; wm._buy(wm.items[0]);
+        out.unclickable = p.money === m;
+        p.money = 800; p.armor = 0; r.state = 'live';
+        wm._buy(wm.items[0]);
+        out.inertOutsideFreeze = p.armor === 0 && p.money === 800;
+        r.state = 'live'; wm.open();
+        inp._pressed.clear();
+        wm.update(0.016, inp);
+        out.closesOnLive = wm.panel.style.display === 'none';
+        return out;
+        })()`,
+     returnByValue: true,
+     });
+   console.log('\n=== BEHAVIOR (P1-4 buy) ===');
+   console.log(buy && buy.result ? buy.result.value : '(buy eval failed)');
    ws.close();
 
    try { server.kill('SIGKILL'); } catch { /* already gone */ }

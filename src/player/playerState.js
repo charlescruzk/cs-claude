@@ -9,6 +9,7 @@ export class PlayerState {
     this.team = 't';
     this.money = 800;
     this.armor = 0;
+    this.helmet = false;
     this.reset();
     }
 

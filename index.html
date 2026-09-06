@@ -78,6 +78,22 @@
                      left: 50%; top: 50%; background: rgba(0,0,0,.75); }
     #scope-overlay::before { width: 1px; height: 100%; transform: translate(-50%,-50%); }
     #scope-overlay::after { width: 100%; height: 1px; transform: translate(-50%,-50%); }
+    /* --- Buy menu (P1-4): a centered panel, shown by B in freeze --- */
+    #buy-menu { position: fixed; inset: 0; display: none; align-items: center;
+                justify-content: center; z-index: 5; pointer-events: none; }
+    #buy-menu .bm-panel { background: rgba(20,22,28,.94);
+                          border: 1px solid rgba(255,255,255,.12);
+                          padding: 16px 24px; min-width: 260px; }
+    #buy-menu .bm-hd { font: 700 16px/1 monospace; letter-spacing: .08em;
+                       margin-bottom: 12px; text-shadow: 0 0 3px #000; }
+    #buy-menu .bm-item { display: block; width: 100%; margin: 6px 0; padding: 8px 10px;
+                         text-align: left; font: 14px/1.2 monospace; color: #fff;
+                         background: rgba(255,255,255,.06);
+                         border: 1px solid rgba(255,255,255,.15);
+                         cursor: pointer; pointer-events: auto; }
+    #buy-menu .bm-item:hover { background: rgba(255,255,255,.14); }
+    #buy-menu .bm-item:disabled, #buy-menu .bm-item.poor { opacity: .4;
+                         cursor: not-allowed; }
   </style>
   <script type="importmap">
   {
@@ -136,6 +152,12 @@
        </div>
     </div>
     <div id="result-banner"></div>
+      <div id="buy-menu">
+         <div class="bm-panel">
+            <div class="bm-hd">Buy — <span id="buy-money">$800</span></div>
+            <div id="buy-items"></div>
+         </div>
+      </div>
   <div id="boot-status">booting…</div>
   <script>
      // Surface any load-time or runtime failure on screen so "nothing happens" is
