@@ -31,40 +31,10 @@ export class Engine {
     this._onResize = this._onResize.bind(this);
     window.addEventListener('resize', this._onResize);
 
-    this._testGroup = this._buildTestWorld();
-    this.scene.add(this._testGroup);
-
     this._frame = this._frame.bind(this);
     this._running = false;
-  }
-
-  // A lit ground plane and one cube so P0-1 shows something on screen.
-  _buildTestWorld() {
-    const g = new THREE.Group();
-
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(50, 50),
-      new THREE.MeshLambertMaterial({ color: 0x5a5a5a })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    g.add(ground);
-
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshLambertMaterial({ color: 0xcc3333 })
-    );
-    cube.position.set(0, 0.5, -5);
-    g.add(cube);
-    this.testCube = cube;
-    return g;
-  }
-
-  // Remove the P0-1 placeholder geometry. The real floor comes from mapBuilder.
-  clearTestWorld() {
-    if (this._testGroup) {
-      this.scene.remove(this._testGroup);
-      this._testGroup = null;
-    }
+    this._reportedError = false; // an update error is reported once, not every frame
+    this.onError = null; // optional main.js hook: show the error on screen
   }
 
   _onResize() {
@@ -86,7 +56,17 @@ export class Engine {
     requestAnimationFrame(this._frame);
     let dt = this.clock.getDelta();
     if (dt > 0.1) dt = 0.1;
-    this._updateFn(dt);
+    try {
+      this._updateFn(dt);
+      } catch (err) {
+        // Report once, then keep rendering so the failure is visible on screen
+        // rather than freezing the last good frame.
+        if (!this._reportedError) {
+          this._reportedError = true;
+          console.error('[engine] update failed:', err);
+          if (this.onError) this.onError(err);
+          }
+        }
     this.renderer.render(this.scene, this.camera);
   }
 

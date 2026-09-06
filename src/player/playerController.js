@@ -35,6 +35,7 @@ export class PlayerController {
     this.recoil = 0; // view kick added to pitch; the viewmodel eases it back
     this.frozen = false; // set by the round loop during freeze
     this.disabled = false; // set when the player dies
+    this.moveScale = 1; // 0.5 while scoped, 1 otherwise (set by main.js)
 
     this.yawObject = new THREE.Object3D();
     this.yawObject.add(this.camera);
@@ -91,6 +92,7 @@ export class PlayerController {
     let speed = RUN;
     if (this.crouching) speed = CROUCH;
     else if (keys.has('ShiftLeft') || keys.has('ShiftRight')) speed = WALK;
+    speed *= this.moveScale; // scoped aim slows the player to a half-pace
 
     // At yaw 0, forward is -Z and right is +X. Rotate those by the current yaw.
     const sin = Math.sin(this.yaw);
@@ -118,7 +120,7 @@ export class PlayerController {
     this.pos.y += this.vel.y * dt;
     this.pos.z += this.vel.z * dt;
 
-    const grounded = resolveCapsuleVsBoxes(this.pos, RADIUS, this.height, this.colliders, { vy: this.vel.y });
+    let grounded = resolveCapsuleVsBoxes(this.pos, RADIUS, this.height, this.colliders, { vy: this.vel.y });
     if (this.pos.y <= 0) {
       this.pos.y = 0;
       if (this.vel.y < 0) this.vel.y = 0;

@@ -1,32 +1,10 @@
 import { events } from '../core/events.js';
-
-// Ray-vs-AABB slab test. Returns the entry distance t (≥ 0) or null when the ray
-// misses `box`. `origin` and `dir` are world-space; dir must be normalized.
-function rayAABB(origin, dir, min, max) {
-   let tmin = 0;
-   let tmax = Infinity;
-   for (const axis of ['x', 'y', 'z']) {
-     const o = origin[axis];
-     const d = dir[axis];
-     if (Math.abs(d) < 1e-8) {
-        // Parallel to this axis: a hit is only possible if the origin is in slab.
-       if (o < min[axis] || o > max[axis]) return null;
-        } else {
-       const inv = 1 / d;
-       let t1 = (min[axis] - o) * inv;
-       let t2 = (max[axis] - o) * inv;
-       if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-       if (t1 > tmin) tmin = t1;
-       if (t2 < tmax) tmax = t2;
-       if (tmin > tmax) return null;
-        }
-     }
-   return tmin;
-}
+import { rayAABB } from '../core/physics.js';
 
 // Resolve one shot against the map and any hittable targets. `targets` is an
-// array of { box, headBox, onHit(damage, headshot) }; `weapon` supplies the base
-// damage. Returns the nearest hit { kind, t, target?, headshot? } or null. A
+// array of { box, headBox, onHit(damage, headshot, weapon) }; `weapon` supplies the
+// base damage and is threaded to the target so its 'kill' event carries the weapon.
+// Returns the nearest hit { kind, t, target?, headshot? } or null. A
 // nearer wall shadows a bot behind it, so a crate blocks the shot. Emits 'hit'.
 export function resolveShot(origin, dir, colliders, targets, weapon) {
    let nearestT = Infinity;
@@ -65,7 +43,7 @@ export function resolveShot(origin, dir, colliders, targets, weapon) {
 
       // A bot was the nearest hit: apply damage (4x on the head) and report it.
     const damage = weapon.damage * (result.headshot ? 4 : 1);
-    result.target.onHit(damage, result.headshot);
+    result.target.onHit(damage, result.headshot, weapon);
     events.emit('hit', { target: result.target, damage, headshot: result.headshot });
     return result;
    }

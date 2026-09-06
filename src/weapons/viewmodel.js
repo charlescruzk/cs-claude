@@ -8,13 +8,25 @@ import { events } from '../core/events.js';
 const FLASH_TIME = 0.04;
 const RECOVER = 0.2;
 
+// Per-weapon silhouette: how the body/barrel scale and tint from the rifle
+// baseline so the pistol/rifle/shotgun/sniper read differently in first person.
+const SHAPES = {
+  Pistol:   { bodyZ: 0.6,  barrelZ: 0.3,  color: 0x3a3a42 },
+  Rifle:    { bodyZ: 1.0,  barrelZ: 1.0,  color: 0x222228 },
+  Shotgun:  { bodyZ: 0.9,  barrelZ: 0.8,  color: 0x2a2a30 },
+  Sniper:   { bodyZ: 0.92, barrelZ: 1.8, color: 0x1c1c22 },
+};
+
 export class Viewmodel {
-  constructor(camera, controller) {
+  constructor(camera, controller, weapon) {
     this.camera = camera;
     this.controller = controller;
+    this.weapon = weapon;
     this.kick = 0;
     this.flashTimer = 0;
+    this._shapeDef = null;
     this._build(camera);
+    if (weapon) this._reshape(weapon.def);
     events.on('shot', this._onShot.bind(this));
    }
 
@@ -23,11 +35,11 @@ export class Viewmodel {
   _build(camera) {
     this.gun = new THREE.Group();
     const mat = new THREE.MeshLambertMaterial({ color: 0x222228 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.5), mat);
-    body.position.set(0, 0, -0.25);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.34), mat);
-    barrel.position.set(0, 0.03, -0.55);
-    this.gun.add(body, barrel);
+    this.body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.5), mat);
+    this.body.position.set(0, 0, -0.25);
+    this.barrel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.34), mat);
+    this.barrel.position.set(0, 0.03, -0.55);
+    this.gun.add(this.body, this.barrel);
     this.gun.position.set(0.32, -0.28, -0.55);
     this.gunBase = this.gun.position.clone();
 
@@ -42,6 +54,15 @@ export class Viewmodel {
      camera.add(this.gun);
    }
 
+   // Rescale the gun to the equipped weapon; the rifle geometry is the baseline.
+  _reshape(def) {
+    const s = SHAPES[def.name] || SHAPES.Rifle;
+    this.body.scale.z = s.bodyZ;
+    this.barrel.scale.z = s.barrelZ;
+    this.body.material.color.setHex(s.color);
+    this._shapeDef = def;
+   }
+
    // A shot: kick the gun, light the flash, and add view recoil (pitch up).
   _onShot(payload) {
     this.kick = 0.12;
@@ -50,6 +71,9 @@ export class Viewmodel {
    }
 
    update(dt) {
+    if (this.weapon && this.weapon.def !== this._shapeDef) this._reshape(this.weapon.def);
+    this.gun.visible = !(this.weapon && this.weapon.scoped); // hide the gun while scoped
+
        // Recoil recovers on a 0.2 s half-life; snap to zero once negligible.
     this.controller.recoil *= Math.pow(0.5, dt / RECOVER);
     if (Math.abs(this.controller.recoil) < 1e-4) this.controller.recoil = 0;

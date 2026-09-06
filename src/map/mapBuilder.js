@@ -44,7 +44,7 @@ export function buildMap(mapData, scene) {
       new THREE.MeshBasicMaterial({ color: 0xffcc33, side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(site.pos[0], 0.05, site.pos[2]);
+    ring.position.set(site.pos[0], 0.25, site.pos[2]);
     scene.add(ring);
     }
 

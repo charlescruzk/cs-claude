@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "serve": "python3 -m http.server 8080 --bind 127.0.0.1",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "probe": "node scripts/cs_probe.mjs"
   }
 }

@@ -5,27 +5,36 @@ import { events } from '../core/events.js';
 // HUD can react. Also emits `hit` (target 'player') so the HUD can flash on damage.
 export class PlayerState {
   constructor() {
+     // Money and armor persist across round resets; only health/alive reset.
+    this.team = 't';
+    this.money = 800;
+    this.armor = 0;
     this.reset();
     }
 
   reset() {
     this.health = 100;
-    this.armor = 0;
-    this.money = 800;
-    this.team = 't';
     this.alive = true;
     }
 
   // `amount` is incoming damage. `headshot` and `weapon` are optional context for
-  // the events; P0 bots deal flat damage with no headshot.
-  takeDamage(amount, headshot = false, weapon = null) {
+  // the hit/kill events; armor mitigates 50% of non-headshots (see below).
+  takeDamage(amount, headshot = false, weapon = null, killer = 'bot') {
     if (!this.alive) return;
-    this.health -= amount;
-    events.emit('hit', { target: 'player', damage: amount, headshot });
+      // Kevlar mitigates 50% of non-headshot damage, draining armor by the
+    // absorbed half; headshots and armorless hits go straight to health.
+    let dmg = amount;
+    if (this.armor > 0 && !headshot) {
+      const original = dmg;
+      dmg *= 0.5;
+      this.armor = Math.max(0, this.armor - (original - dmg));
+      }
+    this.health -= dmg;
+    events.emit('hit', { target: 'player', damage: dmg, headshot });
     if (this.health <= 0) {
       this.health = 0;
       this.alive = false;
-      events.emit('kill', { killer: 'bot', victim: 'player', weapon });
+      events.emit('kill', { killer, victim: 'player', weapon, headshot });
      }
    }
 }

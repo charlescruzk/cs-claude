@@ -32,24 +32,21 @@ export function resolveCapsuleVsBoxes(pos, radius, height, colliders, opts = {})
   const vy = opts.vy || 0;
   let grounded = false;
 
-    // --- X ---
+    // --- horizontal: resolve each overlap along its axis of least penetration ---
   for (const c of colliders) {
     const b = playerBox(pos, radius, height, _p);
     if (!aabbOverlap(b, c)) continue;
     if (c.max.y - pos.y <= STEP) continue; // low enough to step/jump over
-    const left = pos.x + radius - c.min.x;   // exit toward -x
-    const right = c.max.x - (pos.x - radius); // exit toward +x
-    pos.x += left < right ? -left : right;
-    }
 
-    // --- Z ---
-  for (const c of colliders) {
-    const b = playerBox(pos, radius, height, _p);
-    if (!aabbOverlap(b, c)) continue;
-    if (c.max.y - pos.y <= STEP) continue;
-    const back = pos.z + radius - c.min.z;   // exit toward -z
-    const fwd = c.max.z - (pos.z - radius);  // exit toward +z
-    pos.z += back < fwd ? -back : fwd;
+    const left = pos.x + radius - c.min.x;   // push toward -x
+    const right = c.max.x - (pos.x - radius); // push toward +x
+    const back = pos.z + radius - c.min.z;   // push toward -z
+    const fwd = c.max.z - (pos.z - radius);  // push toward +z
+
+    const pushX = left < right ? -left : right;
+    const pushZ = back < fwd ? -back : fwd;
+    if (Math.abs(pushX) <= Math.abs(pushZ)) pos.x += pushX;
+    else pos.z += pushZ;
     }
 
     // --- Y ---
@@ -82,4 +79,28 @@ export function groundCheck(pos, radius, height, colliders, floorY = 0) {
      }
    }
   return false;
+}
+
+// Ray-vs-AABB slab test. Returns the entry distance in [0, maxT], or null on a miss.
+// `dir` must be normalized.
+export function rayAABB(origin, dir, min, max, maxT = Infinity) {
+  let tmin = 0;
+  let tmax = maxT;
+  for (const axis of ['x', 'y', 'z']) {
+    const o = origin[axis];
+    const d = dir[axis];
+    if (Math.abs(d) < 1e-8) {
+       // Parallel to this axis: a hit is only possible if the origin is in slab.
+      if (o < min[axis] || o > max[axis]) return null;
+     } else {
+      const inv = 1 / d;
+      let t1 = (min[axis] - o) * inv;
+      let t2 = (max[axis] - o) * inv;
+      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return null;
+     }
+   }
+  return tmin;
 }

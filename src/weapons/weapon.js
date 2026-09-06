@@ -13,9 +13,10 @@ const _perturb = new THREE.Vector3();
 const _tmp = new THREE.Vector3();
 
 // The player's whole weapon system. Holds one ammo set per weapon and switches
-// between them on keys 1/2. A single update(dt, input, camera) drives switching,
-// reloads, fire cadence (semi vs auto), growing spread, and emits 'shot' with
-// origin, a spread-perturbed direction, and the current weapon def.
+// between them on keys 1-4. A single update(dt, input, camera) drives switching,
+// reloads, fire cadence (semi vs auto), growing spread, and emits one 'shot' per
+// pull carrying the origin, a spread-perturbed direction per pellet, and the
+// current weapon def (main.js fans the pellets out into hitscans).
 export class Weapon {
   constructor(startKey = 'pistol') {
     this.defs = WEAPON_KEYS.map((k) => weaponData[k]);
@@ -29,6 +30,7 @@ export class Weapon {
     this.prevTrigger = false;
     this._releaseTimer = 0;
     this.spread = this.defs[this.index].spread;
+    this.scoped = false; // true only while RMB is held on the scoped (sniper) weapon
   }
 
   get def() { return this.defs[this.index]; }
@@ -36,20 +38,35 @@ export class Weapon {
   get currentSpread() { return this.spread; }
   get isBusy() { return this.switching || this.reloading; }
 
+   // Top every weapon back to a full mag and reserve and clear any in-progress
+   // reload — the round loop calls this on reset so each round starts loaded.
+  refill() {
+    this.defs.forEach((d, i) => {
+      this.ammo[i].mag = d.mag;
+      this.ammo[i].reserve = d.reserve;
+      });
+    this.reloading = false;
+    this.reloadTimer = 0;
+    this.fireCooldown = 0;
+    this.spread = this.defs[this.index].spread;
+    }
+
   update(dt, input, camera) {
     this._switch(input);
     this._reloadInput(input);
     this._updateSpread(dt, input);
+    this._scope(input);
     this._fire(input, camera);
     this._advance(dt);
   }
 
-    // Keys 1/2 change the weapon, start the draw-time block, and drop any reload.
+    // Keys 1-4 change the weapon, start the draw-time block, and drop any reload.
   _switch(input) {
     if (this.switching) return;
     let idx = -1;
-    if (input.justPressed('Digit1')) idx = 0;
-    else if (input.justPressed('Digit2')) idx = 1;
+    for (let i = 0; i < WEAPON_KEYS.length; i++) {
+      if (input.justPressed('Digit' + (i + 1))) { idx = i; break; }
+      }
     if (idx >= 0 && idx !== this.index) {
       this.index = idx;
       this.switching = true;
@@ -96,6 +113,13 @@ export class Weapon {
     if (this.spread < d.spread) this.spread = d.spread;
   }
 
+    // Scope: while RMB is held on the scoped weapon, spread forces to 0 (dead-on
+    // aim). A non-scoped weapon has no scoped flag, so this is a no-op for it.
+  _scope(input) {
+    this.scoped = !!(this.def.scoped && input.mouseDown[2]);
+    if (this.scoped) this.spread = 0;
+  }
+
   _fire(input, camera) {
       // Track the trigger edge every frame so a semi-auto fires once per click
       // and a held trigger does not re-fire the moment a cooldown expires.
@@ -137,6 +161,7 @@ export class Weapon {
       origin: _origin.clone(),
       dir: _perturb.clone(),
       weapon: d,
+      pellets: d.pellets || 1,
     });
   }
 

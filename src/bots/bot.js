@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { events } from '../core/events.js';
-import { resolveCapsuleVsBoxes } from '../core/physics.js';
+import { resolveCapsuleVsBoxes, rayAABB } from '../core/physics.js';
 import { waypoints } from './botData.js';
 
 // Tunables (all times in seconds).
@@ -21,28 +21,6 @@ const TEAM_COLOR = { ct: 0x3355cc, t: 0xcc6633 };
 const _move = new THREE.Vector3();
 const _ray = new THREE.Vector3();
 const _eye = new THREE.Vector3();
-
-// Ray-vs-AABB slab test, clamped to [0, maxT]. Returns the entry distance or null.
-function rayAABB(origin, dir, min, max, maxT) {
-  let tmin = 0;
-  let tmax = maxT;
-  for (const a of ['x', 'y', 'z']) {
-    const o = origin[a];
-    const d = dir[a];
-    if (Math.abs(d) < 1e-8) {
-       if (o < min[a] || o > max[a]) return null;
-       } else {
-      const inv = 1 / d;
-      let t1 = (min[a] - o) * inv;
-      let t2 = (max[a] - o) * inv;
-      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-      if (t1 > tmin) tmin = t1;
-      if (t2 < tmax) tmax = t2;
-      if (tmin > tmax) return null;
-       }
-     }
-  return tmin;
-}
 
 // A CT/T bot: a body + head box, a patrol/engage/dead state machine, and the
 // hittable target (box, headBox, onHit) the hitscan resolves against. `player`
@@ -109,8 +87,8 @@ export class Bot {
     const dx = player.pos.x - this.pos.x;
     const dz = player.pos.z - this.pos.z;
     if (Math.hypot(dx, dz) > ENGAGE_DIST) return false;
-     _eye.set(this.pos.x, EYE, this.pos.z);
-     _ray.set(dx, player.eye - EYE, dz);
+     _eye.set(this.pos.x, this.pos.y + EYE, this.pos.z);
+     _ray.set(dx, (player.pos.y + player.eye) - (this.pos.y + EYE), dz);
     const len = _ray.length();
      _ray.normalize();
     for (const c of colliders) {
@@ -127,7 +105,7 @@ export class Bot {
     this.fireTimer -= dt;
     if (this.fireTimer <= 0) {
       this.fireTimer = FIRE_RATE;
-      if (Math.random() > MISS) player.state.takeDamage(BOT_DAMAGE, false, null);
+      if (Math.random() > MISS) player.state.takeDamage(BOT_DAMAGE, false, null, this.name);
       }
     }
 
@@ -163,14 +141,14 @@ export class Bot {
     if (this.dead) return;
     this.health -= amount;
     events.emit('hit', { target: this, damage: amount, headshot });
-    if (this.health <= 0) this._die(weapon);
+    if (this.health <= 0) this._die(weapon, headshot);
     }
 
-  _die(weapon) {
+  _die(weapon, headshot) {
     this.dead = true;
     this.state = 'dead';
     this.root.rotation.x = Math.PI / 2; // lie the body down
-    events.emit('kill', { killer: 'player', victim: this.name, weapon });
+    events.emit('kill', { killer: 'player', victim: this.name, weapon, headshot });
     }
 
    // Body + head boxes in the team color, with a small dark nose to show facing.

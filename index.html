@@ -48,6 +48,36 @@
                  opacity: .8; }
     #ammo .counts { font: 700 30px/1 monospace; }
     #ammo .counts .res { font-size: 16px; opacity: .7; }
+   /* --- Scoreboard (P0-8) --- */
+   #scoreboard { position: fixed; inset: 0; display: none; align-items: center;
+                 justify-content: center; background: rgba(0,0,0,.65);
+                 pointer-events: none; }
+   #scoreboard .panel { background: rgba(20,22,28,.9); border: 1px solid rgba(255,255,255,.12);
+                        padding: 18px 28px; min-width: 460px; }
+   #scoreboard .hd { display: flex; align-items: baseline; justify-content: space-between;
+                     margin-bottom: 14px; }
+   #scoreboard #sb-score-t { color: #cc6633; font: 700 30px/1 monospace;
+                             min-width: 48px; text-align: center; }
+   #scoreboard #sb-round { font: 700 22px/1 monospace; letter-spacing: .1em; opacity: .85; }
+   #scoreboard #sb-score-ct { color: #3355cc; font: 700 30px/1 monospace;
+                              min-width: 48px; text-align: center; }
+   #scoreboard .teams { display: flex; gap: 40px; }
+   #scoreboard .col { flex: 1; }
+   #scoreboard .tname { font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+                        opacity: .7; margin-bottom: 6px; }
+   #scoreboard .row { display: flex; justify-content: space-between; font: 14px/1.8 monospace; }
+   #scoreboard .kd { opacity: .85; }
+   #result-banner { position: fixed; top: 28%; left: 50%; transform: translateX(-50%);
+                    display: none; font: 700 34px/1.1 monospace; letter-spacing: .08em;
+                    text-shadow: 0 0 8px #000; text-align: center; pointer-events: none; }
+    /* --- Sniper scope (P1-2): a dark circular window with a thin cross --- */
+    #scope-overlay { position: fixed; inset: 0; display: none; pointer-events: none; z-index: 5;
+                     background: radial-gradient(circle at center, rgba(0,0,0,0) 0 38%,
+                     rgba(0,0,0,.55) 38.5%, #000 47%); }
+    #scope-overlay::before, #scope-overlay::after { content: ''; position: absolute;
+                     left: 50%; top: 50%; background: rgba(0,0,0,.75); }
+    #scope-overlay::before { width: 1px; height: 100%; transform: translate(-50%,-50%); }
+    #scope-overlay::after { width: 100%; height: 1px; transform: translate(-50%,-50%); }
   </style>
   <script type="importmap">
   {
@@ -85,7 +115,63 @@
    </div>
 </div>
   <div id="lock-overlay">Click to play</div>
+    <div id="scope-overlay"></div>
+    <div id="scoreboard">
+       <div class="panel">
+          <div class="hd">
+             <span id="sb-score-t">0</span>
+             <span id="sb-round">Round 1</span>
+             <span id="sb-score-ct">0</span>
+          </div>
+          <div class="teams">
+             <div class="col">
+                <div class="tname">Terrorists</div>
+                <div id="team-t"></div>
+             </div>
+             <div class="col">
+                <div class="tname">Counter-Terrorists</div>
+                <div id="team-ct"></div>
+             </div>
+          </div>
+       </div>
+    </div>
+    <div id="result-banner"></div>
   <div id="boot-status">booting…</div>
-  <script type="module" src="./src/main.js"></script>
+  <script>
+     // Surface any load-time or runtime failure on screen so "nothing happens" is
+     // never silent. A plain (non-module) script loads synchronously, so it is armed
+     // before main.js — it catches even a failed module load / CDN miss.
+     (() => {
+       const el = document.getElementById('boot-status');
+       const show = (msg) => {
+         if (!el) return;
+         el.textContent = msg;
+         el.style.color = '#ff6b6b';
+         el.style.whiteSpace = 'pre-wrap';
+         el.style.maxWidth = '70vw';
+         el.style.maxHeight = '60vh';
+         el.style.overflow = 'auto';
+          };
+       window.addEventListener('error', (e) => {
+         const src = e.filename ? `${e.filename}:${e.lineno}` : '';
+         show('JS ERROR: ' + (e.message || (e.error && e.error.message) || 'unknown') +
+               (src ? '\n@ ' + src : ''));
+          });
+       window.addEventListener('unhandledrejection', (e) => {
+         const r = e.reason;
+         show('UNHANDLED REJECTION: ' + (r && r.message ? r.message : r));
+          });
+       window.addEventListener('load', () => setTimeout(() => {
+         if (!window.__game) {
+           show('BOOT INCOMPLETE — main.js did not finish.\n' +
+                 'If opened via file://, module scripts are blocked by the browser; serve it ' +
+                 'over http (npm run serve → http://127.0.0.1:8080). Otherwise the three.js ' +
+                 'import may have failed to load from the CDN.');
+            }
+          }, 1500)
+        );
+      })();
+     </script>
+     <script type="module" src="./src/main.js"></script>
 </body>
 </html>

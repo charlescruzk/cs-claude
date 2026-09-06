@@ -33,6 +33,7 @@ export class Hud {
     this.weaponName = document.getElementById('weapon-name');
     this.killfeed = document.getElementById('killfeed');
     this.vignette = document.getElementById('vignette');
+    this.scope = document.getElementById('scope-overlay');
     this._feed = []; // { el, age }
     this._vignette = 0; // 0..1 flash intensity, eased out in update
     this._bindEvents();
@@ -73,7 +74,7 @@ export class Hud {
    }
 
   update(dt, state) {
-    const { player, weapon, round, spread } = state;
+    const { player, weapon, round, spread, scoped } = state;
     this._ageKills(dt);
 
     // Red vignette eases out from 1; a fresh player hit resets it to 1.
@@ -101,6 +102,10 @@ export class Hud {
 
        // Round timer (top-center).
     this.timer.textContent = round ? fmtTime(round.time) : '0:00';
+
+         // Scoped view: show the scope overlay, hide the normal crosshair.
+    if (this.scope) this.scope.style.display = scoped ? 'block' : 'none';
+    this.cross.style.display = scoped ? 'none' : '';
    }
 
    // Push the four bars out from center by `gap` px from their center.

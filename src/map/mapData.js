@@ -31,10 +31,12 @@ export const mapData = {
      // --- ledge 1: two stacked 1 m crates => a 2 m ledge, west wing ---
     { pos: [-20, 0.5, 10], size: [3, 1, 3], tex: 'crate' },
     { pos: [-20, 1.5, 10], size: [3, 1, 3], tex: 'crate' },
+    { pos: [-20, 0.5, 13], size: [3, 1, 2], tex: 'crate' }, // step up to west ledge
 
      // --- ledge 2: two stacked 1 m crates => a 2 m ledge, east wing ---
     { pos: [20, 0.5, -10], size: [3, 1, 3], tex: 'crate' },
     { pos: [20, 1.5, -10], size: [3, 1, 3], tex: 'crate' },
+    { pos: [20, 0.5, -13], size: [3, 1, 2], tex: 'crate' }, // step up to east ledge
 
      // --- a single 1 m jumpable box in the east plaza ---
     { pos: [24, 0.5, 20], size: [4, 1, 4], tex: 'crate' },

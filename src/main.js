@@ -16,6 +16,10 @@ import { Viewmodel } from './weapons/viewmodel.js';
 import { resolveShot } from './weapons/hitscan.js';
 import { BotManager } from './bots/botManager.js';
 import { Hud } from './hud/hud.js';
+import { Scoreboard } from './hud/scoreboard.js';
+import { Round } from './game/round.js';
+import { spawnFor } from './game/teams.js';
+import { debugEnabled, makeFpsCounter, makeColliderBoxes } from './core/debug.js';
 
 const status = document.getElementById('boot-status');
 const canvas = document.getElementById('game-canvas');
@@ -23,18 +27,22 @@ const overlay = document.getElementById('lock-overlay');
 
 const engine = new Engine(canvas);
 const input = new Input(canvas);
+// Surface an update-loop failure on screen instead of a silent frozen frame.
+engine.onError = (err) => { status.textContent = 'UPDATE ERROR: ' + err.message; status.style.color = '#ff6b6b'; };
 
 overlay.addEventListener('click', () => input.requestLock());
 input._onLockChange = (locked) => overlay.classList.toggle('hidden', locked);
 
-// Build the blockout and drop the P0-1 test cube.
-engine.clearTestWorld();
+// Build the blockout.
 const map = buildMap(mapData, engine.scene);
+// ?debug=1: a fixed FPS readout plus a green wireframe box over every collider.
+// Both stay inert without the flag (fps is a no-op, no group is built).
+const debug = debugEnabled();
+if (debug) engine.scene.add(makeColliderBoxes(map.colliders));
+const fps = debug ? makeFpsCounter() : () => {};
 
 // Player: spawn the controller at a random T spawn and give it the map colliders.
-const pick = (list) => list[Math.floor(Math.random() * list.length)];
-const spawn = pick(map.spawns.t); // one [x, z] pair
-const firstSpawn = { x: spawn[0], z: spawn[1] };
+const firstSpawn = spawnFor('t', map.spawns);
 const controller = new PlayerController(engine.camera, input, map.colliders, firstSpawn);
 engine.scene.add(controller.yawObject);
 const player = new PlayerState();
@@ -44,35 +52,72 @@ controller.state = player; // bots read the player's combat state via the contro
 // and take hits from the player's hitscan. They are the round's enemy team.
 const botManager = new BotManager(engine.scene, map.spawns);
 
-// Weapons: start on the pistol (key 1); key 2 swaps to the rifle. Every shot is
-// resolved against the map and the bot targets.
+// Weapons: keys 1-4 switch the pistol/rifle/shotgun/sniper. One 'shot' per pull
+// fans out one perturbed hitscan per pellet, resolved against the map + bots.
 const weapon = new Weapon('pistol');
-const viewmodel = new Viewmodel(engine.camera, controller);
-events.on('shot', (p) => resolveShot(p.origin, p.dir, map.colliders, botManager.targets(), p.weapon));
+const viewmodel = new Viewmodel(engine.camera, controller, weapon);
 
+// Scratch vectors for the per-pellet fan-out, reused each shot (no per-pellet alloc).
+const _shotBase = new THREE.Vector3();
+const _shotDir = new THREE.Vector3();
+const _shotRand = new THREE.Vector3();
+// A pellet weapon (shotgun) carries several directions per pull: fan out one
+// hitscan per pellet, each a fresh cone perturbation at the weapon's live spread.
+events.on('shot', (p) => {
+  engine.camera.getWorldDirection(_shotBase);
+  const pellets = p.pellets || 1;
+  const s = weapon.currentSpread;
+  for (let i = 0; i < pellets; i++) {
+    _shotDir.copy(_shotBase)
+      .add(_shotRand.set(
+        (Math.random() - 0.5) * 2 * s,
+        (Math.random() - 0.5) * 2 * s,
+        (Math.random() - 0.5) * 2 * s))
+      .normalize();
+    resolveShot(p.origin, _shotDir, map.colliders, botManager.targets(), p.weapon);
+   }
+ });
+
+// Kills: award money on a player kill (+300 base, +100 for a headshot). The
+// economy persists across rounds — PlayerState.reset only resets health/alive.
+events.on('kill', (p) => {
+  if (p.killer === 'player') player.money += 300 + (p.headshot ? 100 : 0);
+   });
+
+// Round loop: freeze -> live -> end -> reset. It owns the timer the HUD reads and,
+// on reset, respawns the player and bots and refills the weapons.
+const round = new Round({ player, controller, weapon, bots: botManager, spawns: map.spawns });
 // HUD: reads live player/weapon/round state each frame and reacts to hit/kill.
-// `round` is a stand-in countdown for P0-7; P0-8 replaces it with the round loop.
-const round = { time: 115 };
 const hud = new Hud();
+// Scoreboard: a Tab-held overlay of team scores and per-participant K/D, plus the
+// result banner shown during the end state.
+const scoreboard = new Scoreboard({ bots: botManager, round });
 
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
-  hud, round,
+  hud, round, scoreboard,
   three: THREE.REVISION,
 };
 
 engine.start((dt) => {
   input.beginFrame();
-   // Only move while locked; the overlay-up state is effectively paused.
+   // The round loop and combat systems run only while locked; overlay-up pauses.
   if (input.locked) {
+    round.update(dt);
     controller.update(dt, input, map.colliders);
     weapon.update(dt, input, engine.camera);
-    botManager.update(dt, controller, map.colliders);
-    round.time = Math.max(0, round.time - dt);
+      // Scoped aim eases the FOV to ~30 and slows the player to a half-pace.
+    const targetFov = weapon.scoped ? 30 : 90;
+    engine.camera.fov += (targetFov - engine.camera.fov) * (1 - Math.exp(-dt / 0.08));
+    engine.camera.updateProjectionMatrix();
+    controller.moveScale = weapon.scoped ? 0.5 : 1;
+    if (round.state === 'live') botManager.update(dt, controller, map.colliders);
      }
   viewmodel.update(dt);
-  hud.update(dt, { player, weapon, round, spread: weapon.currentSpread });
+  scoreboard.update(dt, input);
+  hud.update(dt, { player, weapon, round, spread: weapon.currentSpread, scoped: weapon.scoped });
   input.endFrame();
+  fps(dt);
 });
 
-status.textContent = `three r${THREE.REVISION} — P0-7 HUD (crosshair, health/armor, ammo, timer, feed)`;
+status.textContent = `three r${THREE.REVISION} — P0-8 Round loop (freeze/live/end + scoreboard)`;

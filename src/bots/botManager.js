@@ -1,5 +1,6 @@
 import { Bot } from './bot.js';
 import { names, count } from './botData.js';
+import { spawnFor } from '../game/teams.js';
 
 // Fields a squad of CT bots from the CT spawns and steps them each frame. Bots
 // fight the player (T): they patrol waypoints, engage on line-of-sight, and are
@@ -7,11 +8,11 @@ import { names, count } from './botData.js';
 export class BotManager {
   constructor(scene, spawns) {
     this.scene = scene;
-    this.spawns = spawns.ct; // bots are the CT team
+    this.spawns = spawns; // keep { t, ct } so spawnFor can pull a CT slot as {x,z}
     this.bots = [];
     for (let i = 0; i < count; i++) {
       const bot = new Bot(names[i % names.length], 'ct', scene);
-      bot.spawnAt(this.spawns[i % this.spawns.length]);
+      bot.spawnAt(spawnFor('ct', this.spawns, i));
       this.bots.push(bot);
     }
   }
@@ -35,7 +36,7 @@ export class BotManager {
   // Re-spawn every bot at its slot, used by the round loop on reset (P0-8).
   resetAll() {
     for (let i = 0; i < this.bots.length; i++) {
-      this.bots[i].spawnAt(this.spawns[i % this.spawns.length]);
+      this.bots[i].spawnAt(spawnFor('ct', this.spawns, i));
     }
   }
 }
