@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cs-browser</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+                 font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #fff; }
+    #game-canvas { display: block; width: 100vw; height: 100vh; }
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    #lock-overlay { position: fixed; inset: 0; display: flex; align-items: center;
+                    justify-content: center; background: rgba(0,0,0,.6);
+                    font-size: 28px; letter-spacing: .05em; cursor: pointer; }
+    #lock-overlay.hidden { display: none; }
+    #boot-status { position: fixed; left: 12px; top: 12px; font: 12px/1.4 monospace;
+                   color: #9f9; opacity: .8; }
+    /* --- HUD (P0-7) --- */
+    #hud > * { position: absolute; }
+    #vignette { inset: 0; pointer-events: none; opacity: 0;
+                background: radial-gradient(ellipse at center, rgba(255,0,0,0) 45%,
+                              rgba(160,0,0,.55) 100%); transition: opacity .08s linear; }
+    /* Crosshair: four bars pushed out from center by the current spread. */
+    #crosshair { inset: 0; }
+    #crosshair .ch { position: absolute; left: 50%; top: 50%;
+                     background: rgba(0,255,160,.9); box-shadow: 0 0 1px #000; }
+    #crosshair .up, #crosshair .down { width: 2px; height: 8px; }
+    #crosshair .left, #crosshair .right { width: 8px; height: 2px; }
+    #timer { top: 12px; left: 50%; transform: translateX(-50%);
+             font: 700 22px/1 monospace; letter-spacing: .04em; text-shadow: 0 0 4px #000; }
+    #killfeed { top: 12px; right: 12px; text-align: right;
+                font: 13px/1.5 monospace; }
+    #killfeed .kf { opacity: 1; transition: opacity 1s linear; white-space: nowrap;
+                    text-shadow: 0 0 3px #000; }
+    #status { left: 20px; bottom: 18px; font: 13px/1.5 monospace; }
+    #status .row { display: flex; align-items: baseline; gap: 8px; }
+    #status .num { font: 700 28px/1 monospace; min-width: 42px; text-align: right;
+                   text-shadow: 0 0 4px #000; }
+    #status .bar { width: 220px; height: 6px; background: rgba(255,255,255,.15); }
+    #status .bar > i { display: block; height: 100%; transition: width .15s linear; }
+    #health-bar { background: #34d15b; }
+    #armor-bar { background: #5b9bd1; }
+    #status .lbl { width: 46px; text-transform: uppercase; letter-spacing: .08em;
+                   opacity: .8; font-size: 11px; }
+    #ammo { right: 20px; bottom: 18px; text-align: right;
+            font: 13px/1.5 monospace; text-shadow: 0 0 3px #000; }
+    #ammo .wpn { font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+                 opacity: .8; }
+    #ammo .counts { font: 700 30px/1 monospace; }
+    #ammo .counts .res { font-size: 16px; opacity: .7; }
+   /* --- Scoreboard (P0-8) --- */
+   #scoreboard { position: fixed; inset: 0; display: none; align-items: center;
+                 justify-content: center; background: rgba(0,0,0,.65);
+                 pointer-events: none; }
+   #scoreboard .panel { background: rgba(20,22,28,.9); border: 1px solid rgba(255,255,255,.12);
+                        padding: 18px 28px; min-width: 460px; }
+   #scoreboard .hd { display: flex; align-items: baseline; justify-content: space-between;
+                     margin-bottom: 14px; }
+   #scoreboard #sb-score-t { color: #cc6633; font: 700 30px/1 monospace;
+                             min-width: 48px; text-align: center; }
+   #scoreboard #sb-round { font: 700 22px/1 monospace; letter-spacing: .1em; opacity: .85; }
+   #scoreboard #sb-score-ct { color: #3355cc; font: 700 30px/1 monospace;
+                              min-width: 48px; text-align: center; }
+   #scoreboard .teams { display: flex; gap: 40px; }
+   #scoreboard .col { flex: 1; }
+   #scoreboard .tname { font-size: 12px; text-transform: uppercase; letter-spacing: .12em;
+                        opacity: .7; margin-bottom: 6px; }
+   #scoreboard .row { display: flex; justify-content: space-between; font: 14px/1.8 monospace; }
+   #scoreboard .kd { opacity: .85; }
+   #result-banner { position: fixed; top: 28%; left: 50%; transform: translateX(-50%);
+                    display: none; font: 700 34px/1.1 monospace; letter-spacing: .08em;
+                    text-shadow: 0 0 8px #000; text-align: center; pointer-events: none; }
+    /* --- Sniper scope (P1-2): a dark circular window with a thin cross --- */
+    #scope-overlay { position: fixed; inset: 0; display: none; pointer-events: none; z-index: 5;
+                     background: radial-gradient(circle at center, rgba(0,0,0,0) 0 38%,
+                     rgba(0,0,0,.55) 38.5%, #000 47%); }
+    #scope-overlay::before, #scope-overlay::after { content: ''; position: absolute;
+                     left: 50%; top: 50%; background: rgba(0,0,0,.75); }
+    #scope-overlay::before { width: 1px; height: 100%; transform: translate(-50%,-50%); }
+    #scope-overlay::after { width: 100%; height: 1px; transform: translate(-50%,-50%); }
+     /* --- Tactical overlays (P1-6): a white-out and a brief orange flash --- */
+    #whiteout, #impact-flash { position: fixed; inset: 0; pointer-events: none;
+                opacity: 0; z-index: 6; transition: none; }
+    #whiteout { background: #fff; }
+    #impact-flash { background: rgba(255,110,0,.6); }
+    /* --- Buy menu (P1-4): a centered panel, shown by B in freeze --- */
+    #buy-menu { position: fixed; inset: 0; display: none; align-items: center;
+                justify-content: center; z-index: 5; pointer-events: none; }
+    #buy-menu .bm-panel { background: rgba(20,22,28,.94);
+                          border: 1px solid rgba(255,255,255,.12);
+                          padding: 16px 24px; min-width: 260px; }
+    #buy-menu .bm-hd { font: 700 16px/1 monospace; letter-spacing: .08em;
+                       margin-bottom: 12px; text-shadow: 0 0 3px #000; }
+    #buy-menu .bm-item { display: block; width: 100%; margin: 6px 0; padding: 8px 10px;
+                         text-align: left; font: 14px/1.2 monospace; color: #fff;
+                         background: rgba(255,255,255,.06);
+                         border: 1px solid rgba(255,255,255,.15);
+                         cursor: pointer; pointer-events: auto; }
+    #buy-menu .bm-item:hover { background: rgba(255,255,255,.14); }
+    #buy-menu .bm-item:disabled, #buy-menu .bm-item.poor { opacity: .4;
+                         cursor: not-allowed; }
+      /* --- Tactical indicator (P1-7): G/H nade chips, dimmed while in flight --- */
+    #tactical { position: fixed; pointer-events: none; left: 50%; bottom: 18px; transform: translateX(-50%);
+                display: flex; gap: 16px; font: 12px/1.5 monospace;
+                text-shadow: 0 0 3px #000; }
+    #tactical .td { display: flex; align-items: center; gap: 6px;
+                    transition: opacity .15s linear; }
+    #tactical .td.dim { opacity: .3; }
+    #tactical .key { font-weight: 700; }
+    /* --- Buy hint (P1-7): a centered [B] prompt during the freeze phase --- */
+    #buy-hint { position: fixed; pointer-events: none; top: 34%; left: 50%; transform: translateX(-50%); display: none;
+                font: 700 20px/1.2 monospace; letter-spacing: .06em;
+                text-shadow: 0 0 6px #000; }
+</style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="hud">
+   <div id="vignette"></div>
+   <div id="crosshair">
+      <div class="ch up"></div>
+      <div class="ch down"></div>
+      <div class="ch left"></div>
+      <div class="ch right"></div>
+   </div>
+   <div id="timer">1:55</div>
+   <div id="killfeed"></div>
+   <div id="status">
+      <div class="row"><span class="lbl">HP</span>
+         <span class="num" id="health-num">100</span>
+         <span class="bar"><i id="health-bar"></i></span></div>
+      <div class="row"><span class="lbl">ARM</span>
+         <span class="num" id="armor-num">0</span>
+         <span class="bar"><i id="armor-bar"></i></span></div>
+   </div>
+   <div id="ammo">
+      <div class="wpn" id="weapon-name">Pistol</div>
+      <div class="counts"><span id="mag">12</span>
+         <span class="res">/ <span id="reserve">100</span></span></div>
+   </div>
+</div>
+  <div id="lock-overlay">Click to play</div>
+    <div id="scope-overlay"></div>
+       <div id="whiteout"></div>
+       <div id="impact-flash"></div>
+      <div id="tactical">
+         <div class="td" id="td-frag"><span class="key">G</span> FRAG</div>
+         <div class="td" id="td-flash"><span class="key">H</span> FLASH</div>
+      </div>
+      <div id="buy-hint">Press [B] to buy</div>
+    <div id="scoreboard">
+       <div class="panel">
+          <div class="hd">
+             <span id="sb-score-t">0</span>
+             <span id="sb-round">Round 1</span>
+             <span id="sb-score-ct">0</span>
+          </div>
+          <div class="teams">
+             <div class="col">
+                <div class="tname">Terrorists</div>
+                <div id="team-t"></div>
+             </div>
+             <div class="col">
+                <div class="tname">Counter-Terrorists</div>
+                <div id="team-ct"></div>
+             </div>
+          </div>
+       </div>
+    </div>
+    <div id="result-banner"></div>
+      <div id="buy-menu">
+         <div class="bm-panel">
+            <div class="bm-hd">Buy — <span id="buy-money">$800</span></div>
+            <div id="buy-items"></div>
+         </div>
+      </div>
+  <div id="boot-status">booting…</div>
+  <script>
+     // Surface any load-time or runtime failure on screen so "nothing happens" is
+     // never silent. A plain (non-module) script loads synchronously, so it is armed
+     // before main.js — it catches even a failed module load / CDN miss.
+     (() => {
+       const el = document.getElementById('boot-status');
+       const show = (msg) => {
+         if (!el) return;
+         el.textContent = msg;
+         el.style.color = '#ff6b6b';
+         el.style.whiteSpace = 'pre-wrap';
+         el.style.maxWidth = '70vw';
+         el.style.maxHeight = '60vh';
+         el.style.overflow = 'auto';
+          };
+       window.addEventListener('error', (e) => {
+         const src = e.filename ? `${e.filename}:${e.lineno}` : '';
+         show('JS ERROR: ' + (e.message || (e.error && e.error.message) || 'unknown') +
+               (src ? '\n@ ' + src : ''));
+          });
+       window.addEventListener('unhandledrejection', (e) => {
+         const r = e.reason;
+         show('UNHANDLED REJECTION: ' + (r && r.message ? r.message : r));
+          });
+       window.addEventListener('load', () => setTimeout(() => {
+         if (!window.__game) {
+           show('BOOT INCOMPLETE — main.js did not finish.\n' +
+                 'If opened via file://, module scripts are blocked by the browser; serve it ' +
+                 'over http (npm run serve → http://127.0.0.1:8080). Otherwise the three.js ' +
+                 'import may have failed to load from the CDN.');
+            }
+          }, 1500)
+        );
+      })();
+     </script>
+     <script type="module" src="./src/main.js"></script>
+</body>
+</html>

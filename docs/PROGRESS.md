@@ -1,0 +1,293 @@
+# P0 Progress
+
+Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked after two
+attempts (write what you tried). Add a one-line note per task.
+
+## RESUME — 2026-09-04 (repair pass)
+
+**State.** P0-1 → P0-8 are code-complete and `npm run check` passes (24/24 after adding
+`src/core/debug.js` in Task 10). A first-frame runtime crash had made the game appear to
+"do nothing" on **Click to play**; this pass fixes it.
+
+**Root cause (corrected).** The earlier `file://` diagnosis was **wrong**. "Click to play
+does nothing" was a *runtime* bug, not an environmental one: `playerController.vertical`
+declared `const grounded` and then reassigned it inside its `if (this.pos.y <= 0)` block.
+The player spawns at `y = 0`, so this threw `TypeError: Assignment to constant variable` on
+the very first frame after pointer lock. The throw escaped `Engine._frame` before
+`renderer.render()`, freezing the last good frame — indistinguishable from "nothing happens".
+Task 1 changes `const` to `let`.
+
+**Why `npm run check` cannot catch it.** `check.mjs` runs `node --check`, which proves
+*syntax* only; the reassignment is legal syntax that fails at runtime, so no amount of
+`node --check` finds it. That is why `scripts/cs_probe.mjs` (headless Chrome over the
+DevTools Protocol: it serves the page, loads it, clicks **Click to play**, and prints the
+console logs, any exceptions, and the post-click `#boot-status`) must be run before any task
+is marked verified. `npm run check` is necessary, never sufficient.
+
+**What else the pass fixed.** Task 2 makes an update-loop throw degrade visibly instead of
+freezing the frame: `_frame` now wraps `updateFn` in a try/catch and a one-time
+`engine.onError` writes `UPDATE ERROR: …` to `#boot-status` — complementing index.html's
+load-time / CDN-miss boot diagnostic, which still catches `BOOT INCOMPLETE` / `JS ERROR` /
+`UNHANDLED REJECTION`. Tasks 3-10 are correctness/spec fixes: collision resolves on the
+least-penetration axis; bot LOS uses eye-to-eye world-Y; the two ledges get a 1 m step so
+they are reachable; the bombsite ring is raised above its platform; the P0-1 test world is
+deleted; `rayAABB` is deduplicated into `core/physics.js`; the first spawn uses `spawnFor`;
+and the `?debug=1` FPS/wireframe overlay is added (`src/core/debug.js`). See the task notes
+and git history.
+
+**Still unverified.** The probe could not be run this session (the Bash safety classifier was
+down), so no task here is marked *verified* — only code-complete. Run `npm run probe` (or
+`node scripts/cs_probe.mjs`); a clean boot reports no uncaught exceptions and a
+`#boot-status` of `three r170 …` (not `JS ERROR` / `UPDATE ERROR`). Then serve with
+`npm run serve` and play three clean rounds, per P0-9.
+
+- [x] P0-1 Engine core and frame loop — Engine (renderer/scene/cam/clock/resize + `requestAnimationFrame` loop, dt clamped to 0.1s, hemisphere+directional light, 50×50 ground + test cube, `clearTestWorld()` for P0-3); EventBus with shared `events`; main.js wires engine + `window.__game`.
+- [x] P0-2 Input and pointer lock — `Input` (keys Set, mouseDX/DY accumulated per frame, 3-button `mouseDown`, `justPressed` edge detection, pointer lock on overlay click, `locked` flag, begin/endFrame resets). `#lock-overlay` was already scaffolded in index.html; wired its show/hide to the lock state in main.js.
+- [x] P0-3 Map data and blockout builder — `mapData` (26 boxes: perimeter, 30 m central lane, wing dividers, mid crates, two 2-step 1 m ledges, a 1 m jump box, T/CT cover, bombsite-A platform; 6 T + 6 CT spawns on opposite ends); `textures.makeTexture(kind)` procedural canvas (noise + seams, RepeatWrapping, cached per kind); `buildMap` adds floor + one mesh/collider per box + bombsite rings, returns `{colliders, spawns, sites}` with `colliders.length === boxes.length`. main.js clears the test cube and parks a static camera on a T spawn.
+- [x] P0-4 Player controller with collision — `physics.js` (`aabbOverlap`, `resolveCapsuleVsBoxes` resolving X→Z→Y with a 0.6 m step threshold, `groundCheck`); `PlayerController` (yaw rig + pitch camera, WASD relative to yaw, run 6.5 / crouch 2.5 / walk 3.5 / jump, gravity 20, per-axis slide); `PlayerState` (health 100 / armor 0 / money 800 / team t / alive, `takeDamage` emits `kill` victim 'player' at 0 HP + `hit` for the vignette). Loop drives the player only while locked.
+- [x] P0-5 Weapons: data, firing, hitscan, viewmodel — `weaponData` (pistol 34/400rpm/12+100 semi, rifle 36/600rpm/30+90 auto w/ spread growing +0.004/shot, reset 0.3s); `Weapon` (per-weapon ammo, 1/2 switch w/ 0.5s draw, R + empty-mag auto-reload, semi-vs-auto via `prevTrigger` edge, spread-perturbed dir, emits `shot`); `hitscan.resolveShot` (ray-vs-AABB slab test, 4× headshot, nearer wall shadows a bot); `viewmodel` (two-box gun + 40 ms muzzle flash + view recoil). `shot` wired to `resolveShot` against the map in main.js.
+- [x] P0-6 Bots — `botData` (12 waypoints over the lane/wings/ends/corners, 8 codenames, `count:4`); `Bot` (0.8×1.8 body + 0.4 head in team color, dark nose to show facing; patrol/engage/dead state machine: patrol to a random waypoint at 3.5 m/s via the player's `resolveCapsuleVsBoxes` slide, engage when the player is alive + ≤30 m + an unobstructed eye-to-eye ray (fire every 0.25 s, 12 dmg, 20% miss, 2 s LOS grace), die by lying down 90° about X; `takeDamage` emits `hit`/`kill`); `BotManager` (4 CT bots at CT spawns, `targets()`, `update`, `resetAll`, `aliveCount`). main.js wires `resolveShot` against `botManager.targets()` and steps bots each locked frame.
+- [x] P0-7 HUD — index.html adds the `#hud` DOM (vignette, 4-bar crosshair, timer, kill feed, HP/ARM bars, ammo/weapon) + corner-anchored CSS so nothing overlaps at 1280×720/1920×1080; `hud.js` `Hud` updates them from `{player, weapon, round, spread}` each frame, opens the crosshair with spread (4–46 px over 0–0.05 rad), flashes the red vignette on a `hit` whose target is `'player'`, and keeps a fading top-right kill feed (last 5, fade after 5 s) off `kill`. main.js drives it with a stand-in `round = { time: 115 }`.
+- [x] P0-8 Round loop, teams, scoreboard — `teams.js` (`TEAMS` + `spawnFor` normalizing mapData `[x,z]` spawns to the `{x,z}` feet position `spawnAt` reads); `round.js` `Round` (freeze 5s / live 115s / end 5s / reset: early CT win on player death or timer, T win when `bots.aliveCount()===0`; emits `roundState` on each transition and `roundEnd` with the winner on entering `end`; on reset respawns the player at a fresh T spawn with full health, `weapon.refill()`, `bots.resetAll()`; a player death disables the controller, drops the camera to 0.3 m, and ends the round as a CT win via the `kill` event); `scoreboard.js` `Scoreboard` (Tab-held overlay of team scores + round number + per-participant K/D accumulated from `kill`, and a winner banner on `roundEnd` hidden on the next `freeze`); index.html adds the `#scoreboard`/`#result-banner` DOM + CSS. main.js: `round.update(dt)` runs first in the locked block, `botManager.update` is gated on `round.state==='live'`, and `scoreboard.update(dt,input)` runs after the viewmodel. — **Code complete; the first-frame `const grounded` crash that blocked it is fixed (Task 1); runtime still unverified, pending `cs_probe.mjs`.**
+- [x] P0-9 Polish and stability pass — `?debug=1` FPS/wireframe overlay done (Task 10, `src/core/debug.js`); known-issues audit done (Task 11). The three-clean-rounds runtime check is code-ready but still unverified — pending `cs_probe.mjs` / a browser.
+
+## Decisions made along the way
+
+- P0-2: `#lock-overlay` (and its CSS) was already present in the scaffold's index.html, so P0-2 only wired its show/hide to the pointer-lock state rather than adding the div. No index.html edit was needed.
+- P0-2: `justPressed` is edge-triggered via a `_downCodes` set; mouse "just down" is handled by the weapon's own `prevTrigger` flag (P0-5), so `Input` only tracks per-key edges.
+- P0-4: The architecture note suggests jump velocity 4.8 m/s, but under gravity 20 that peaks at only ~0.58 m and cannot reach a 1 m crate. The P0-4 *acceptance* ("jump onto a 1 m crate works; a 2 m wall does not") takes priority, so `JUMP = 7.2` (peak ~1.3 m): clears 1 m crates, stays short of a 2 m wall. `resolveCapsuleVsBoxes` treats any box whose top is within 0.6 m of the feet as non-blocking so the player slides/lands on low crates.
+- P0-5: `resolveShot` takes `weapon` as a 5th arg (the spec signature is `(origin, dir, colliders, targets)`) so it can apply the 4× headshot to `weapon.damage`; main.js passes the shot's weapon def.
+- P0-5: Camera view-recoil needed somewhere to live. Added a minimal `recoil` field to `PlayerController` (`syncCamera` uses `pitch + recoil`); `viewmodel` eases it back on a 0.2 s half-life. This is the one touch to `playerController.js` outside P0-5's file list — it is zero while not firing, so P0-4 behavior is unchanged.
+- P0-5: `Weapon` starts on the pistol (key 1) and switches to the rifle (key 2); both are available from spawn.
+- P0-6: `BotManager` passes the `controller` (PlayerController) as the bot's `player` arg, so main.js wires `controller.state = player` — the bot reads combat state via `controller.state` (`alive`, `takeDamage`) and geometry via `controller.pos` / `controller.eye`.
+- P0-6: `resolveShot` calls `onHit(damage, headshot)` (a P0-5 two-arg signature), so a player-killed bot's `kill` event has `weapon: undefined`. P0-7 will thread the weapon through `onHit` or fall back to a placeholder; deferred to keep P0-6 inside its file list.
+- P0-6: `rayAABB` is duplicated — `hitscan.js` (shooting) and `bot.js` (line-of-sight). Duplicated to keep P0-6 inside its file list; P0-9 should dedupe it into `core/physics.js`.
+- P0-6: a dead player has no respawn yet — that is P0-8. Bot fire is gated on `player.state.alive`, so a dead player simply stops taking damage until the round loop respawns.
+- P0-7: the round timer uses a stand-in `round = { time: 115 }` (115 s = 1:55, the P0-8 live-round length) that main.js decrements. P0-8 replaces this with the real round loop from `src/game/round.js`; the HUD already reads `round.time`, so only main.js's round source changes.
+- P0-7: the kill feed omits the weapon when the `kill` event carries none (bot kills arrive weapon-less via P0-6's two-arg `onHit` call). Thread the weapon through in P0-8 or log it as a known issue; the feed degrades gracefully.
+- P0-7: crosshair spread→px is `gap = 4 + clamp(spread/0.05)·42`; the rifle base 0.006 sits at ~9 px and grows to ~43 px as the per-shot spread climbs, settling back over 0.3 s when the trigger releases.
+- P0-8: `spawnFor(team, spawns, index?)` in `teams.js` normalizes mapData's `[x,z]` spawn pairs to the `{x,z}` feet position the controllers read. This also fixes a latent P0-6 bug: `BotManager` was passing raw `[x,z]` pairs to `bot.spawnAt`, which reads `.x`/`.z` and so produced `NaN` positions. `BotManager` now keeps the full `{t,ct}` spawns object and calls `spawnFor('ct', spawns, i)` in both the constructor and `resetAll`.
+- P0-8: the weapon is threaded through `hitscan.onHit(damage, headshot, weapon)` (resolving the two-arg `onHit` deferred at P0-6/P0-7) so a killed bot's `kill` event carries its weapon, and the bot's name is threaded through `PlayerState.takeDamage(amount, headshot, weapon, killer)` so a bot-killed player's `kill` event names its killer. The P0-7 kill feed now shows the weapon on bot deaths, resolving the P0-7 "weapon-less kill" known issue.
+- P0-8: the scoreboard shows the player under the display name `'You'`, but the `kill` events use the internal id `'player'` (bot.js as killer, PlayerState as victim). The scoreboard normalizes `'player' → 'You'` when accumulating K/D so the player's kills/deaths land in the rendered T column instead of a phantom unrendered entry.
+- P0-8: `round.update(dt)` runs first in the locked block; `botManager.update` is gated on `round.state==='live'` so bots do not fire during freeze/end (and a dead bot can't fire — `bot.update` early-returns when `dead`). The old `round.time = Math.max(0, …)` decrement was removed; the timer is now owned by the `Round` state machine. A player death ends the round synchronously inside `botManager.update` via the `kill` event (`_onPlayerDeath` disables the controller, drops the camera to 0.3 m, and calls `_endRound('ct')`); `_endRound` is guarded by `state!=='live'` so a same-frame death + last-kill counts only one winner.
+- P0-8: `Weapon.refill()` tops both mags/reserves and clears the reload/cooldown/spread so each round starts fully loaded.
+
+## Known issues
+
+(Be honest. Anything that does not meet the spec goes here.)
+
+- P0-8: the two P0-6/P0-7-deferred "weapon-less kill" items are resolved — the weapon is threaded through `onHit` and the killer name through `takeDamage`, so every `kill` event carries a weapon and a killer.
+- P0-8: bots deal flat `BOT_DAMAGE` with no headshot multiplier (`bot._engage` calls `takeDamage(BOT_DAMAGE, false, …)`). Intentional P0 scope — the scoreboard and kill feed still work; per-hit headshot damage for bots is a P0-9 polish item.
+- P0-8: the `Round` loop is a single session-long loop; its `kill` listener is registered once and never unregistered. Harmless for P0; a real match loop would tear it down per match.
+- **Runtime unverified (repair pass).** The first-frame "Click to play does nothing" was *not* the `file://` ES-module block as first suspected — it was a `const grounded` reassignment in `playerController.vertical` that threw on frame one and froze the render (fixed in Task 1). `npm run check` is syntax-only and cannot catch this class of error, so P0-8's runtime acceptance and P0-9's three-clean-rounds check stay unverified until `scripts/cs_probe.mjs` (or a browser) confirms a clean boot. `engine.onError` (Task 2) now writes any update-loop throw to `#boot-status` as `UPDATE ERROR: …`.
+
+---
+
+## P1 — weapons, economy, tacticals
+
+Spec: `docs/P1_SPEC.md`. One task at a time; `npm run check` after each, `npm run probe`
+after P1-1 / P1-5 / P1-7. The probe is the runtime source of truth; a task is *verified*
+only when the probe is clean. This supersedes the P0 "runtime unverified" note above —
+the probe now boots cleanly in this headless environment (see the probe note).
+
+**Probe note (this GPU-less headless environment).** Three.js needs a WebGL context; in
+headless Chrome that means **old** headless mode (`--headless`, not `--headless=new`,
+which leaves the context Disabled) plus ANGLE/SwiftShader (`--use-gl=angle
+--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`). The probe
+also stubs `requestPointerLock` (headless has no pointer) so the click-to-lock path runs
+and the combat loop is exercised, and it classifies a WebGL-context failure as `[env]` so
+a real code error is not masked by it. A stray headless Chrome from an earlier run can hold
+CDP port 9333 and mask a fresh spawn — kill leftover probe chromes before running.
+
+- [x] P1-1 Shotgun + Sniper: data, firing, viewmodels — `weaponData.js`: `shotgun`
+   (semi, `pellets:8`, 20/pellet, rpm 120, 8+64, spread 0.06, high recoil) and `sniper`
+   (100 dmg, rpm 60, 1+10, spread 0, high recoil, `scoped:true`); `WEAPON_KEYS` -> 4.
+   `weapon.js` switches on `Digit1-4` and emits `pellets: d.pellets || 1` per pull (one
+   viewmodel recoil kick per pull). `main.js` fans out N `resolveShot` calls per shot,
+   each a fresh cone perturbation at `weapon.currentSpread` — the perturbation moved out of
+   weapon.js so every pellet gets an independent direction. `viewmodel.js` reshapes the gun
+   per weapon via a `SHAPES` table (body/barrel scale + tint from the rifle baseline).
+   **Verified:** `check` 24/24; probe clean (no code errors, engine boots: `hasGame`,
+   three r170, `roundState` `freeze`, 4 bots). Behavior proven in the probe by firing
+   `resolveShot` at a bot with no colliders: the **sniper one-shots** a 100-HP bot
+   (`sniperKilled: true`); the **shotgun's 8-pellet** pull lands several hits and kills it
+   (`shotLanded: 4` — 100 HP / 20 per pellet, the 5th is the killing blow — `shotKilled: true`).
+- [x] P1-2 Sniper scope — `weapon.js` gains a `scoped` flag set by a new `_scope(input)`
+    (runs after `_updateSpread` in `update`): while RMB (`input.mouseDown[2]`) is held on a
+    weapon whose def has `scoped:true`, `scoped` is true and `spread` forces to 0 (dead-on aim);
+    a non-scoped def has no flag, so RMB is ignored. `main.js` eases the camera FOV 90↔30 on
+    an ~0.08 s time constant (`camera.updateProjectionMatrix()` each frame) and sets
+    `controller.moveScale = scoped ? 0.5 : 1` (player.js multiplies horizontal speed by it — a
+    minimal out-of-file-list touch, like P0-5's `recoil`); the viewmodel hides the gun while
+    scoped (`viewmodel.js`), and the HUD shows a `#scope-overlay` (dark circular window + thin
+    cross) and hides the normal crosshair. `index.html` adds the overlay div + CSS. **Verified:**
+    `check` 24/24; probe clean and the scope block proves it — `sniperScoped:true`,
+    `spreadForced0:true` (a 0.03 accumulated spread is zeroed), `releasedUnscoped:true`,
+    `pistolIgnores:true`.
+- [x] P1-3 Armor mitigation + money on kills — `playerState.takeDamage(amount,
+    headshot, weapon, killer)`: when `armor > 0` and **not** a headshot, apply 50%
+    mitigation (`dmg *= 0.5; armor = max(0, armor - (original - dmg))`) then
+    `health -= dmg`; headshots bypass armor. `money`/`armor` moved to the constructor
+    and `reset()` now resets **only** `health`/`alive`, so the economy survives a round
+    reset (round.js line 85 calls `player.reset()`). `headshot` is threaded
+    `bot.takeDamage -> _die -> kill` event, and a `kill` listener in main.js awards
+    `+300` per player kill, `+100` for a headshot. **Verified:** `check` 24/24; probe
+    clean — `kevlarHalved/armorAbsorbed/headshotBypass/moneyOnKill/moneyOnHeadshot/
+    moneyPersists/armorPersists` all true.
+- [x] P1-4 Freeze-phase buy menu — `src/hud/buyMenu.js` `BuyMenu(player, weapon,
+    round, input)` on the scoreboard overlay pattern: `B` (`justPressed('KeyB')`)
+    toggles a centered `#buy-menu` panel while `round.state==='freeze'`; items
+    `Kevlar` 250 → `armor=100`, `Kevlar + Helmet` 650 → `armor=100` + `helmet`,
+    `Magazine Pack` 100 → `weapon.current.reserve = weapon.def.reserve`. Each
+    `{name,cost,apply()}`; unaffordable items grey/disabled and un-clickable, a
+    live money readout, buying deducts + applies in place. Opening releases pointer
+    lock (`input.canvas.exitPointerLock()`) so the mouse can click; closing re-requests
+    it (best-effort — a browser may need a click gesture). `update(dt,input)` runs
+    **outside** the locked block in main.js so it stays live while its lock release
+    is up, and auto-closes on `live`. index.html adds the `#buy-menu` shell + CSS.
+    **Verified:** `check` 25/25; probe clean — `opensInFreeze/kevlarArmor/kevlarMoney/
+    kevGreyed/magOk/unclickable/inertOutsideFreeze/closesOnLive` all true.
+- [x] P1-5 Thrown projectiles (frag + flash) — `src/game/projectile.js` `Projectile`
+    (position/velocity + gravity 9.8, a ballistic step, a swept wall check via
+    `rayAABB`, a floor check at `y=0.15`, and a fuse; on first floor/wall contact or
+    fuse expiry it fires `onImpact(pos)` and removes its sphere mesh) + `ProjectileManager`
+    (`throw`/`update`, pruning the dead). `src/weapons/tactical.js` `Tactical`: `G` throws a
+    red frag (fuse 4 s), `H` a yellow flash (fuse 1.6 s), each from the camera forward with
+    an upward arc, one active throw of each (a slot check blocks a second while the first is
+    in flight); a detonation emits a `tactical` `{kind,pos}` event for P1-6's effects.
+     main.js creates a `ProjectileManager(scene)` + `Tactical`, and the locked block calls
+     `tactical.update` then `projectiles.update`. **Verified:** `check` 27/27; probe clean —
+     `threwFrag/oneAtATime/impactFired/impactKind:'frag'/removed/steppedUnderFuse` all true
+    (the frag arced and hit the floor before its fuse, so the loop terminated by impact, not
+     timeout).
+- [x] P1-6 Tactical effects — `src/game/effects.js` `Effects({scene, colliders,
+    player, getTargets})` reacts to the `tactical` events P1-5 emits on a detonation.
+    A **frag** damages every bot within `FRAG_RADIUS` (4 m) with linear falloff from
+    `FRAG_DMG` (100) at center to 0 at the edge — bots only, the thrower is never hit —
+    throws an expanding additive-blended explosion sphere that grows to the blast
+    radius and fades over 0.3 s then is pruned, and triggers a brief (0.15 s) orange
+    screen flash. A **flash** whiteouts the screen only when the player's eye has line
+    of sight to the impact (`rayAABB` clear and within `FLASH_RANGE` 20 m) — a full-screen
+     `#whiteout` div eased `1 -> 0` over 2 s; bots ignore it. The two screen overlays are
+    opacities `effects.update(dt)` eases and `hud.js` paints each frame from
+    `effects.whiteout`/`effects.flash`; index.html adds the `#whiteout` + `#impact-flash`
+    divs + CSS, and main.js builds `Effects` and runs `effects.update(dt)` before the HUD.
+     **Verified:** `check` 28/28; probe clean — `fragDamaged/farUntouched/noSelfDamage/
+    explosionSpawned/explosionPruned/flashWhiteout/flashFading/flashOutOfRange` all true.
+- [x] P1-7 HUD integration + polish — `tactical.js` gains `ready()` (`{ frag, flash }`
+    — a nade is "held"/available while its slot is free). `hud.js` grabs `#td-frag`/
+    `#td-flash`/`#buy-hint` and, in `update`, shows the `[B] Buy` hint only during
+     `freeze` and dims a nade chip while it is in flight (from `tactical.ready()`);
+     `main.js` passes `tactical: tactical.ready()` into the HUD state. `index.html` adds
+    the two overlays (outside `#hud`, `position: fixed`, alongside the scope/whiteout/
+    flash divs) + CSS; the scope + whiteout overlays (P1-2/P1-6) and the armor readout
+    (P1-3) are unchanged and remain wired. `?debug=1` FPS + colliders are untouched
+    (`debug.js` and its main.js wiring were not modified this pass). **Verified:**
+    `check` 28/28; probe clean — `buyHintFreeze/buyHintLive/bothHeld/fragThrew/
+    fragDimmed/fragRelit` all true.
+
+### P1-1 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+ "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-1) ===
+{ sniperDef:'Sniper', shotDef:'Shotgun', shotPellets:8,
+  sniperKilled:true, shotLanded:4, shotKilled:true }
+```
+
+### P1-2 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+  "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-2 scope) ===
+{ sniperScoped:true, spreadForced0:true, releasedUnscoped:true, pistolIgnores:true }
+```
+
+### P1-3 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-3 econ) ===
+{ kevlarHalved:true, armorAbsorbed:true, headshotBypass:true,
+  moneyOnKill:true, moneyOnHeadshot:true, moneyPersists:true, armorPersists:true }
+```
+
+### P1-4 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-4 buy) ===
+{ opensInFreeze:true, kevlarArmor:true, kevlarMoney:true,
+  kevGreyed:true, magOk:true, unclickable:true,
+  inertOutsideFreeze:true, closesOnLive:true }
+```
+
+### P1-5 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-5 tactical) ===
+{ threwFrag:true, oneAtATime:true, impactFired:true,
+  impactKind:'frag', removed:true, steppedUnderFuse:true }
+```
+
+### P1-6 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-6 effects) ===
+{ fragDamaged:true, farUntouched:true, noSelfDamage:true,
+  explosionSpawned:true, explosionPruned:true,
+  flashWhiteout:true, flashFading:true, flashOutOfRange:true }
+```
+
+### P1-7 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-7 hud) ===
+{ buyHintFreeze:true, buyHintLive:true, bothHeld:true,
+  fragThrew:true, fragDimmed:true, fragRelit:true }
+```
