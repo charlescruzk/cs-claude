@@ -34,6 +34,11 @@ export class Hud {
     this.killfeed = document.getElementById('killfeed');
     this.vignette = document.getElementById('vignette');
     this.scope = document.getElementById('scope-overlay');
+    this.whiteout = document.getElementById('whiteout');
+    this.flashEl = document.getElementById('impact-flash');
+    this.tdFrag = document.getElementById('td-frag');
+    this.tdFlash = document.getElementById('td-flash');
+    this.buyHint = document.getElementById('buy-hint');
     this._feed = []; // { el, age }
     this._vignette = 0; // 0..1 flash intensity, eased out in update
     this._bindEvents();
@@ -74,7 +79,7 @@ export class Hud {
    }
 
   update(dt, state) {
-    const { player, weapon, round, spread, scoped } = state;
+    const { player, weapon, round, spread, scoped, whiteout, flash, tactical } = state;
     this._ageKills(dt);
 
     // Red vignette eases out from 1; a fresh player hit resets it to 1.
@@ -106,6 +111,15 @@ export class Hud {
          // Scoped view: show the scope overlay, hide the normal crosshair.
     if (this.scope) this.scope.style.display = scoped ? 'block' : 'none';
     this.cross.style.display = scoped ? 'none' : '';
+    if (this.whiteout) this.whiteout.style.opacity = (whiteout || 0).toFixed(3);
+    if (this.flashEl) this.flashEl.style.opacity = (flash || 0).toFixed(3);
+
+        // Buy hint: a centered [B] prompt, shown only during the freeze phase.
+    if (this.buyHint) this.buyHint.style.display = (round && round.state === 'freeze') ? 'block' : 'none';
+        // Tactical chips dim while a nade is in flight (not held in hand).
+    const t = tactical || {};
+    if (this.tdFrag) this.tdFrag.classList.toggle('dim', !t.frag);
+    if (this.tdFlash) this.tdFlash.classList.toggle('dim', !t.flash);
    }
 
    // Push the four bars out from center by `gap` px from their center.

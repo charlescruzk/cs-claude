@@ -78,6 +78,11 @@
                      left: 50%; top: 50%; background: rgba(0,0,0,.75); }
     #scope-overlay::before { width: 1px; height: 100%; transform: translate(-50%,-50%); }
     #scope-overlay::after { width: 100%; height: 1px; transform: translate(-50%,-50%); }
+     /* --- Tactical overlays (P1-6): a white-out and a brief orange flash --- */
+    #whiteout, #impact-flash { position: fixed; inset: 0; pointer-events: none;
+                opacity: 0; z-index: 6; transition: none; }
+    #whiteout { background: #fff; }
+    #impact-flash { background: rgba(255,110,0,.6); }
     /* --- Buy menu (P1-4): a centered panel, shown by B in freeze --- */
     #buy-menu { position: fixed; inset: 0; display: none; align-items: center;
                 justify-content: center; z-index: 5; pointer-events: none; }
@@ -94,7 +99,19 @@
     #buy-menu .bm-item:hover { background: rgba(255,255,255,.14); }
     #buy-menu .bm-item:disabled, #buy-menu .bm-item.poor { opacity: .4;
                          cursor: not-allowed; }
-  </style>
+      /* --- Tactical indicator (P1-7): G/H nade chips, dimmed while in flight --- */
+    #tactical { position: fixed; pointer-events: none; left: 50%; bottom: 18px; transform: translateX(-50%);
+                display: flex; gap: 16px; font: 12px/1.5 monospace;
+                text-shadow: 0 0 3px #000; }
+    #tactical .td { display: flex; align-items: center; gap: 6px;
+                    transition: opacity .15s linear; }
+    #tactical .td.dim { opacity: .3; }
+    #tactical .key { font-weight: 700; }
+    /* --- Buy hint (P1-7): a centered [B] prompt during the freeze phase --- */
+    #buy-hint { position: fixed; pointer-events: none; top: 34%; left: 50%; transform: translateX(-50%); display: none;
+                font: 700 20px/1.2 monospace; letter-spacing: .06em;
+                text-shadow: 0 0 6px #000; }
+</style>
   <script type="importmap">
   {
     "imports": {
@@ -132,6 +149,13 @@
 </div>
   <div id="lock-overlay">Click to play</div>
     <div id="scope-overlay"></div>
+       <div id="whiteout"></div>
+       <div id="impact-flash"></div>
+      <div id="tactical">
+         <div class="td" id="td-frag"><span class="key">G</span> FRAG</div>
+         <div class="td" id="td-flash"><span class="key">H</span> FLASH</div>
+      </div>
+      <div id="buy-hint">Press [B] to buy</div>
     <div id="scoreboard">
        <div class="panel">
           <div class="hd">

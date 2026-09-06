@@ -19,6 +19,9 @@ import { Hud } from './hud/hud.js';
 import { Scoreboard } from './hud/scoreboard.js';
 import { BuyMenu } from './hud/buyMenu.js';
 import { Round } from './game/round.js';
+import { ProjectileManager } from './game/projectile.js';
+import { Tactical } from './weapons/tactical.js';
+import { Effects } from './game/effects.js';
 import { spawnFor } from './game/teams.js';
 import { debugEnabled, makeFpsCounter, makeColliderBoxes } from './core/debug.js';
 
@@ -97,9 +100,20 @@ const scoreboard = new Scoreboard({ bots: botManager, round });
 // It runs outside the locked block so it works while its pointer-lock release is up.
 const buyMenu = new BuyMenu(player, weapon, round, input);
 
+// Thrown tacticals: G/H spawn an arcing frag or flash into the ProjectileManager,
+// which integrates and detonates them. The effects themselves land in P1-6.
+const projectiles = new ProjectileManager(engine.scene);
+const tactical = new Tactical(projectiles, engine.camera);
+// Effects react to a 'tactical' detonation: frag blast damage + explosion + orange
+// flash, and a flash white-out when the player has line of sight to the impact.
+const effects = new Effects({
+  scene: engine.scene, colliders: map.colliders,
+  player: controller, getTargets: () => botManager.targets(),
+});
+
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
-  hud, round, scoreboard, buyMenu,
+  hud, round, scoreboard, buyMenu, projectiles, tactical, effects,
   three: THREE.REVISION,
 };
 
@@ -116,10 +130,16 @@ engine.start((dt) => {
     engine.camera.updateProjectionMatrix();
     controller.moveScale = weapon.scoped ? 0.5 : 1;
     if (round.state === 'live') botManager.update(dt, controller, map.colliders);
+        // Thrown tacticals: read G/H then integrate any in-flight nade.
+    tactical.update(dt, input, engine.camera);
+    projectiles.update(dt, map.colliders);
      }
   viewmodel.update(dt);
   scoreboard.update(dt, input);
-  hud.update(dt, { player, weapon, round, spread: weapon.currentSpread, scoped: weapon.scoped });
+   // Effects fade the screen overlays every frame; the HUD then paints them.
+  effects.update(dt);
+  hud.update(dt, { player, weapon, round, spread: weapon.currentSpread, scoped: weapon.scoped,
+    whiteout: effects.whiteout, flash: effects.flash, tactical: tactical.ready() });
   // The buy menu runs unlocked so it stays live while its pointer-lock release is up.
   buyMenu.update(dt, input);
   input.endFrame();

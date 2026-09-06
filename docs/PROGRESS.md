@@ -147,9 +147,44 @@ CDP port 9333 and mask a fresh spawn — kill leftover probe chromes before runn
     is up, and auto-closes on `live`. index.html adds the `#buy-menu` shell + CSS.
     **Verified:** `check` 25/25; probe clean — `opensInFreeze/kevlarArmor/kevlarMoney/
     kevGreyed/magOk/unclickable/inertOutsideFreeze/closesOnLive` all true.
-- [ ] P1-5 Thrown projectiles (frag + flash)
-- [ ] P1-6 Tactical effects
-- [ ] P1-7 HUD integration + polish
+- [x] P1-5 Thrown projectiles (frag + flash) — `src/game/projectile.js` `Projectile`
+    (position/velocity + gravity 9.8, a ballistic step, a swept wall check via
+    `rayAABB`, a floor check at `y=0.15`, and a fuse; on first floor/wall contact or
+    fuse expiry it fires `onImpact(pos)` and removes its sphere mesh) + `ProjectileManager`
+    (`throw`/`update`, pruning the dead). `src/weapons/tactical.js` `Tactical`: `G` throws a
+    red frag (fuse 4 s), `H` a yellow flash (fuse 1.6 s), each from the camera forward with
+    an upward arc, one active throw of each (a slot check blocks a second while the first is
+    in flight); a detonation emits a `tactical` `{kind,pos}` event for P1-6's effects.
+     main.js creates a `ProjectileManager(scene)` + `Tactical`, and the locked block calls
+     `tactical.update` then `projectiles.update`. **Verified:** `check` 27/27; probe clean —
+     `threwFrag/oneAtATime/impactFired/impactKind:'frag'/removed/steppedUnderFuse` all true
+    (the frag arced and hit the floor before its fuse, so the loop terminated by impact, not
+     timeout).
+- [x] P1-6 Tactical effects — `src/game/effects.js` `Effects({scene, colliders,
+    player, getTargets})` reacts to the `tactical` events P1-5 emits on a detonation.
+    A **frag** damages every bot within `FRAG_RADIUS` (4 m) with linear falloff from
+    `FRAG_DMG` (100) at center to 0 at the edge — bots only, the thrower is never hit —
+    throws an expanding additive-blended explosion sphere that grows to the blast
+    radius and fades over 0.3 s then is pruned, and triggers a brief (0.15 s) orange
+    screen flash. A **flash** whiteouts the screen only when the player's eye has line
+    of sight to the impact (`rayAABB` clear and within `FLASH_RANGE` 20 m) — a full-screen
+     `#whiteout` div eased `1 -> 0` over 2 s; bots ignore it. The two screen overlays are
+    opacities `effects.update(dt)` eases and `hud.js` paints each frame from
+    `effects.whiteout`/`effects.flash`; index.html adds the `#whiteout` + `#impact-flash`
+    divs + CSS, and main.js builds `Effects` and runs `effects.update(dt)` before the HUD.
+     **Verified:** `check` 28/28; probe clean — `fragDamaged/farUntouched/noSelfDamage/
+    explosionSpawned/explosionPruned/flashWhiteout/flashFading/flashOutOfRange` all true.
+- [x] P1-7 HUD integration + polish — `tactical.js` gains `ready()` (`{ frag, flash }`
+    — a nade is "held"/available while its slot is free). `hud.js` grabs `#td-frag`/
+    `#td-flash`/`#buy-hint` and, in `update`, shows the `[B] Buy` hint only during
+     `freeze` and dims a nade chip while it is in flight (from `tactical.ready()`);
+     `main.js` passes `tactical: tactical.ready()` into the HUD state. `index.html` adds
+    the two overlays (outside `#hud`, `position: fixed`, alongside the scope/whiteout/
+    flash divs) + CSS; the scope + whiteout overlays (P1-2/P1-6) and the armor readout
+    (P1-3) are unchanged and remain wired. `?debug=1` FPS + colliders are untouched
+    (`debug.js` and its main.js wiring were not modified this pass). **Verified:**
+    `check` 28/28; probe clean — `buyHintFreeze/buyHintLive/bothHeld/fragThrew/
+    fragDimmed/fragRelit` all true.
 
 ### P1-1 probe output
 
@@ -209,4 +244,50 @@ CDP port 9333 and mask a fresh spawn — kill leftover probe chromes before runn
 { opensInFreeze:true, kevlarArmor:true, kevlarMoney:true,
   kevGreyed:true, magOk:true, unclickable:true,
   inertOutsideFreeze:true, closesOnLive:true }
+```
+
+### P1-5 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-5 tactical) ===
+{ threwFrag:true, oneAtATime:true, impactFired:true,
+  impactKind:'frag', removed:true, steppedUnderFuse:true }
+```
+
+### P1-6 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-6 effects) ===
+{ fragDamaged:true, farUntouched:true, noSelfDamage:true,
+  explosionSpawned:true, explosionPruned:true,
+  flashWhiteout:true, flashFading:true, flashOutOfRange:true }
+```
+
+### P1-7 probe output
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+   "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-7 hud) ===
+{ buyHintFreeze:true, buyHintLive:true, bothHeld:true,
+  fragThrew:true, fragDimmed:true, fragRelit:true }
 ```

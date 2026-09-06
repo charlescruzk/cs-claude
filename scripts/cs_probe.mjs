@@ -242,6 +242,115 @@ async function main() {
      });
    console.log('\n=== BEHAVIOR (P1-4 buy) ===');
    console.log(buy && buy.result ? buy.result.value : '(buy eval failed)');
+
+          // P1-5 tacticals: G throws a frag that arcs, detonates (floor/fuse),
+          // fires its onImpact (a 'tactical' event), and is pruned from the live
+          // set; a second throw is ignored while the first is in flight.
+   const tac = await send('Runtime.evaluate', {
+     expression: `(async () => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const m = g.projectiles;
+        let impact = null;
+        const onTac = (e) => { impact = e; };
+        g.events.on('tactical', onTac);
+        g.input._pressed.clear(); g.input._pressed.add('KeyG');
+        g.tactical.update(0.016, g.input, g.engine.camera);
+        out.threwFrag = m.list.length === 1;
+        g.input._pressed.add('KeyG');
+        g.tactical.update(0.016, g.input, g.engine.camera);
+        out.oneAtATime = m.list.length === 1;
+        let steps = 0;
+        while (m.list.length > 0 && steps < 400) { m.update(0.016, g.map.colliders); steps++; }
+        out.impactFired = !!impact;
+        out.impactKind = impact ? impact.kind : null;
+        out.removed = m.list.length === 0;
+        out.steppedUnderFuse = steps < 400;
+        g.events.off('tactical', onTac);
+        return out;
+         })()`,
+     returnByValue: true,
+     awaitPromise: true,
+      });
+   console.log('\n=== BEHAVIOR (P1-5 tactical) ===');
+   console.log(tac && tac.result ? tac.result.value : '(tactical eval failed)');
+
+           // P1-6 effects: a frag damages a nearby bot (falloff by distance), leaves
+           // a far bot and the thrower untouched, and throws a prunable explosion; a
+           // flash whiteouts when the player sees the impact, fades, and is ignored
+           // out of range.
+   const eff = await send('Runtime.evaluate', {
+     expression: `(() => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const e = g.effects, bm = g.botManager;
+        const near = bm.bots[0]; near.dead = false; near.health = 100;
+        const far = bm.bots[1]; far.dead = false; far.health = 100;
+        far.pos.set(near.pos.x + 50, 0, near.pos.z);
+        g.player.health = 100; g.player.alive = true;
+        const impact = near.pos.clone(); impact.y = 0.2;
+        g.events.emit('tactical', { kind: 'frag', pos: impact });
+        out.fragDamaged = near.health < 100;
+        out.farUntouched = far.health === 100;
+        out.noSelfDamage = g.player.health === 100 && g.player.alive;
+        out.explosionSpawned = e._explosions.length >= 1;
+        for (let i = 0; i < 40; i++) e.update(0.05);
+        out.explosionPruned = e._explosions.length === 0;
+        const eye = g.controller.pos;
+        const seen = eye.clone(); seen.y += g.controller.eye;
+        g.events.emit('tactical', { kind: 'flash', pos: seen });
+        out.flashWhiteout = e.whiteout === 1;
+        e.update(0.016);
+        out.flashFading = e.whiteout < 1;
+        e.whiteout = 0; e._whiteoutLeft = 0;
+        const farFlash = eye.clone(); farFlash.y += 1.6; farFlash.x += 30;
+        g.events.emit('tactical', { kind: 'flash', pos: farFlash });
+        out.flashOutOfRange = e.whiteout === 0;
+        return out;
+        })()`,
+     returnByValue: true,
+      });
+   console.log('\n=== BEHAVIOR (P1-6 effects) ===');
+   console.log(eff && eff.result ? eff.result.value : '(effects eval failed)');
+
+                // P1-7 HUD: the [B] buy hint shows only in the freeze phase, and the
+                // tactical chips dim a nade while it is in flight (not held in hand),
+                // re-lighting once its slot frees. Proven without a code change.
+   const p17 = await send('Runtime.evaluate', {
+     expression: `(() => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const r = g.round, hud = g.hud, t = g.tactical;
+        const base = { player: g.player, weapon: g.weapon, round: r,
+          spread: 0, scoped: false, whiteout: 0, flash: 0 };
+        const step = () => hud.update(0.016,
+          Object.assign({ tactical: t.ready() }, base));
+           // Free any leftover slot the P1-5 throw left in flight so the chips start held.
+        t._frag = null; t._flash = null;
+           // Buy hint: visible in freeze, hidden once live.
+        r.state = 'freeze'; step();
+        out.buyHintFreeze = hud.buyHint.style.display === 'block';
+        r.state = 'live'; step();
+        out.buyHintLive = hud.buyHint.style.display === 'none';
+           // Both chips held at rest; throwing a frag dims its chip until the slot frees.
+        out.bothHeld = !hud.tdFrag.classList.contains('dim')
+           && !hud.tdFlash.classList.contains('dim');
+        g.input._pressed.clear(); g.input._pressed.add('KeyG');
+        t.update(0.016, g.input, g.engine.camera);
+        out.fragThrew = t._frag !== null;
+        step();
+        out.fragDimmed = hud.tdFrag.classList.contains('dim');
+        t._frag.alive = false; t._frag = null;
+        step();
+        out.fragRelit = !hud.tdFrag.classList.contains('dim');
+        g.input._pressed.clear();
+        r.state = 'freeze';
+        return out;
+         })()`,
+    returnByValue: true,
+      });
+   console.log('\n=== BEHAVIOR (P1-7 hud) ===');
+   console.log(p17 && p17.result ? p17.result.value : '(p1-7 eval failed)');
    ws.close();
 
    try { server.kill('SIGKILL'); } catch { /* already gone */ }
