@@ -44,9 +44,12 @@ export class Viewmodel {
     this.gun.position.set(0.32, -0.28, -0.55);
     this.gunBase = this.gun.position.clone();
 
+    // The flash is the one thing that must bloom: its colour is set beyond white
+    // in linear space (2.0, 1.6, 0.66) so it clears the bloom threshold of 1.0.
+    // A plain 0xffcc55 sits at ~0.65 luminance and would never glow.
     this.flash = new THREE.Mesh(
       new THREE.SphereGeometry(0.06, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffcc55 })
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(2.0, 1.6, 0.66) })
      );
     this.flash.visible = false;
     this.gun.add(this.flash);

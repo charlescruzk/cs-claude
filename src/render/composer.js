@@ -4,6 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 // The post stack. Order matters: OutputPass applies tone mapping and the output
 // colour space, so everything after it is display-referred. SMAA's edge detection
@@ -33,6 +34,12 @@ export function makeComposer(engine) {
   const gtao = new GTAOPass(scene, camera, w, h, null, { radius: 0.5, scale: 0.6, samples: 16 });
   composer.addPass(gtao);
 
+  // Bloom after AO, before tone mapping. Threshold 1.0 in linear space — only
+  // genuinely bright things (the muzzle flash, the sky) glow; concrete does not.
+  // The HalfFloatType target is what makes a threshold above 1.0 meaningful.
+  const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.6, 0.4, 1.0);
+  composer.addPass(bloom);
+
   const output = new OutputPass();
   composer.addPass(output);
 
@@ -44,6 +51,6 @@ export function makeComposer(engine) {
     setSize: (width, height) => composer.setSize(width, height),
     setPixelRatio: (pr) => composer.setPixelRatio(pr),
     passes: composer.passes,
-    renderPass, gtao, output, smaa, composer,
+    renderPass, gtao, bloom, output, smaa, composer,
   };
 }
