@@ -291,6 +291,11 @@ async function main() {
         const far = bm.bots[1]; far.dead = false; far.health = 100;
         far.pos.set(near.pos.x + 50, 0, near.pos.z);
         g.player.health = 100; g.player.alive = true;
+        // Park the thrower 50 m away so the frag provably cannot reach them:
+        // with self-damage (FIX_PROMPT_13) a frag at the thrower's feet hurts
+        // them, so this assertion now means "out of range, no damage".
+        const origPos = g.controller.pos.clone();
+        g.controller.pos.set(near.pos.x + 50, 0, near.pos.z);
         const impact = near.pos.clone(); impact.y = 0.2;
         g.events.emit('tactical', { kind: 'frag', pos: impact });
         out.fragDamaged = near.health < 100;
@@ -309,6 +314,7 @@ async function main() {
         const farFlash = eye.clone(); farFlash.y += 1.6; farFlash.x += 30;
         g.events.emit('tactical', { kind: 'flash', pos: farFlash });
         out.flashOutOfRange = e.whiteout === 0;
+        g.controller.pos.copy(origPos);
         return out;
         })()`,
      returnByValue: true,
@@ -519,6 +525,90 @@ async function main() {
      });
    console.log('\n=== BEHAVIOR (damage feedback) ===');
    console.log(dmg && dmg.result ? dmg.result.value : '(damage feedback eval failed)');
+
+           // FIX_PROMPT_13 grenades: a frag damages bots in the open (falloff by
+           // distance), is blocked by walls, and hurts the thrower; a flash blinds
+           // bots by line of sight and facing, and the blind state holds fire,
+           // wears off, and clears on respawn. The field is controlled — the real
+           // map colliders are swapped out so only the walls we add matter.
+   const gren = await send('Runtime.evaluate', {
+     expression: `(() => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const e = g.effects, bm = g.botManager;
+        const botA = bm.bots[0], botB = bm.bots[1];
+        const realColliders = e.colliders;
+        const origPos = g.controller.pos.clone();
+        e.colliders = [];
+        botA.dead = false; botA.health = 100; botA.blindTimer = 0;
+        botB.dead = false; botB.health = 100; botB.blindTimer = 0;
+        // --- frag: open field, falloff, self-damage ---
+        const blast = g.controller.pos.clone().set(0, 0.2, 0);
+        botA.pos.set(1, 0, 0);   // 1 m from the blast, in the open
+        botB.pos.set(7, 0, 0);   // 7 m from the blast, in the open
+        g.player.health = 100; g.player.alive = true;
+        g.controller.pos.set(0, 0, 0); // thrower at the blast
+        g.events.emit('tactical', { kind: 'frag', pos: blast });
+        out.fragDamagesNearby = botA.health < 100;
+        out.fragFalloff = botA.health < botB.health; // 1 m bot took more than 7 m bot
+        out.fragHurtsThrower = g.player.health < 100;
+        // --- frag: a wall between blast and target protects it ---
+        botA.health = 100; botB.health = 100;
+        const wall = { min: g.controller.pos.clone().set(3, 0, -2),
+                       max: g.controller.pos.clone().set(3.1, 3, 2) };
+        e.colliders = [wall];
+        botA.pos.set(5, 0, 0); // 5 m, wall at x=3 between blast and bot
+        g.events.emit('tactical', { kind: 'frag', pos: blast });
+        out.fragBlockedByWall = botA.health === 100;
+        // thrower behind the same wall — reset health first, the frag above
+        // already hit the player standing at the blast
+        g.player.health = 100; g.player.alive = true;
+        g.controller.pos.set(5, 0, 0);
+        g.events.emit('tactical', { kind: 'frag', pos: blast });
+        out.fragSpareThrowerBehindWall = g.player.health === 100;
+        // --- flash: LOS blinds, walls block, facing matters ---
+        e.colliders = [];
+        botA.dead = false; botA.health = 100; botA.blindTimer = 0;
+        botB.dead = false; botB.health = 100; botB.blindTimer = 0;
+        const flashPos = g.controller.pos.clone().set(0, 1.6, 0);
+        botA.pos.set(3, 0, 0); botA.yaw = Math.PI / 2;   // facing the flash
+        botB.pos.set(3, 0, 0); botB.yaw = -Math.PI / 2;  // facing away
+        g.events.emit('tactical', { kind: 'flash', pos: flashPos });
+        out.flashBlindsBot = botA.blindTimer > 0;
+        out.flashFacingMatters = botA.blindTimer > botB.blindTimer;
+        botA.blindTimer = 0; botB.blindTimer = 0;
+        e.colliders = [wall];
+        botA.pos.set(5, 0, 0); botA.yaw = Math.PI / 2;
+        g.events.emit('tactical', { kind: 'flash', pos: flashPos });
+        out.flashBlockedByWall = botA.blindTimer === 0;
+        // --- blind behaviour: holds fire, wears off, clears on respawn ---
+        e.colliders = [];
+        botA.dead = false; botA.health = 100;
+        botA.blindTimer = 3.0; botA.state = 'patrol'; botA.losTimer = 0;
+        botA.pos.set(0, 0, 0);
+        g.controller.pos.set(5, 0, 0);
+        g.player.health = 100; g.player.alive = true;
+        botA.update(1.0, g.controller, []); // still heavily blind (2.0 > 1.575)
+        out.blindBotHoldsFire = g.player.health === 100;
+        botA.blindTimer = 2.0; botA.state = 'patrol'; botA.losTimer = 0;
+        botA.pos.set(0, 0, 0);
+        g.player.health = 1000; g.player.alive = true; // recovery may land a few hits
+        let steps = 0;
+        while (botA.blindTimer > 0 && steps < 100) { botA.update(0.1, g.controller, []); steps++; }
+        out.blindWearsOff = botA.blindTimer === 0 && botA.state === 'engage' && botA.hasLOS;
+        botA.blindTimer = 2.0;
+        botA.spawnAt({ x: 0, z: 0 });
+        out.respawnClearsBlind = botA.blindTimer === 0;
+        // restore the field for whatever follows
+        e.colliders = realColliders;
+        g.controller.pos.copy(origPos);
+        g.player.health = 100; g.player.alive = true;
+        return out;
+        })()`,
+     returnByValue: true,
+     });
+   console.log('\n=== BEHAVIOR (grenades) ===');
+   console.log(gren && gren.result ? gren.result.value : '(grenades eval failed)');
    ws.close();
 
    try { server.kill('SIGKILL'); } catch { /* already gone */ }
