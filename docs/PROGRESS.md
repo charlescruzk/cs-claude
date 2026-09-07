@@ -35,6 +35,30 @@ attempts (write what you tried). Add a one-line note per task.
   toward the target (`1 - exp(-dt/0.06)`, same pattern as the scope FOV). `spawnAt()` still
   sets both directly.
 
+## PHASE2_STAGE_A — RUN A1 (2026-09-06) — PBR materials and renderer output
+
+- [x] Task 1 — PBR materials with procedural roughness maps. `textures.js` gained
+  `makeRoughness(kind)` (greyscale grain canvas, own cache, deliberately NOT sRGB) and
+  `makeTexture` now sets `tex.colorSpace = SRGBColorSpace` on the colour map only. All
+  surfaces except the bombsite ring and the muzzle flash are now `MeshStandardMaterial`:
+  map boxes + floor via `getMaterial`/floor material (ROUGHNESS table: concrete 0.95, crate
+  0.80, sand 1.0, floor 0.90; floor 0.9), bots body/head/nose (0.65/0.0, colours kept),
+  viewmodel gunmetal (0.40/0.60), projectile (0.55/0.0). The bot nose was converted too —
+  the task listed only body/head but its "Done when" says every surface except the ring and
+  muzzle flash; it reuses the bot's 0.65/0.0 values. The explosion sphere stays
+  `MeshBasicMaterial` (additive effect, not a surface). **Expected to look darker/flatter
+  until Task 2 — not compensated.**
+- [x] Task 2 — sRGB output, ACES tone mapping, retuned lights. `engine.js` sets
+  `outputColorSpace = SRGBColorSpace`, `toneMapping = ACESFilmicToneMapping`,
+  `toneMappingExposure = 1.0`; hemisphere retuned to `(0xbcd3f0, 0x4a4036, 0.45)` and sun to
+  `(0xfff2e0, 3.2)`; `sun.position.set(60, 90, 40)` unchanged. Warmer sun vs cooler sky fill
+  is what will make bounce light read in Stage C.
+
+**Verification (RUN A1):** `npm run check` 28/28; `npm run probe` exception-free with every
+P1-1..P1-7 behaviour block green. **The probe cannot judge an image** — tone mapping, tonal
+range, and "nothing blown out" need a human to confirm by eye in a browser. If the overall
+image is too dark/bright, the only knob is `toneMappingExposure` within 0.8–1.3.
+
 ## RESUME — 2026-09-06 (diagnostic pass, `docs/FIX_PROMPT_2.md`)
 
 **State.** The P0/P1 build is **code-complete and logic-verified**: it was driven by hand
