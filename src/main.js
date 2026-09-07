@@ -4,7 +4,7 @@
 // against the map. The loop only drives the player/weapon while the pointer is
 // locked (the overlay is the "paused" state). Bots and the round loop arrive next.
 import * as THREE from 'three';
-import { Engine } from './core/engine.js';
+import { Engine, vFovFor, BASE_HFOV, SCOPED_HFOV } from './core/engine.js';
 import { Input } from './core/input.js';
 import { events } from './core/events.js';
 import { mapData } from './map/mapData.js';
@@ -251,8 +251,9 @@ engine.start((dt) => {
     round.update(dt);
     controller.update(dt, input, map.colliders);
     weapon.update(dt, input, engine.camera);
-      // Scoped aim eases the FOV to ~30 and slows the player to a half-pace.
-    const targetFov = weapon.scoped ? 30 : 90;
+      // Scoped aim eases the FOV to ~40 horizontal and slows the player to a half-pace.
+    const aspect = engine.camera.aspect;
+    const targetFov = vFovFor(weapon.scoped ? SCOPED_HFOV : BASE_HFOV, aspect);
     engine.camera.fov += (targetFov - engine.camera.fov) * (1 - Math.exp(-dt / 0.08));
     engine.camera.updateProjectionMatrix();
     controller.moveScale = weapon.scoped ? 0.5 : 1;

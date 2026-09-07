@@ -1,5 +1,15 @@
 import * as THREE from 'three';
 
+// Counter-Strike quotes FOV horizontally; Three.js wants it vertically. Converting
+// at runtime keeps the horizontal FOV constant no matter the window's aspect, which
+// is what players expect — a narrow window should crop the sides, not zoom in.
+export function vFovFor(hFovDeg, aspect) {
+  const h = (hFovDeg * Math.PI) / 180;
+  return (2 * Math.atan(Math.tan(h / 2) / aspect) * 180) / Math.PI;
+}
+export const BASE_HFOV = 90;   // hip-fire, as CS quotes it
+export const SCOPED_HFOV = 40; // sniper zoom
+
 // Rendering + loop only. The Engine knows nothing about the game; it creates the
 // scene/camera/renderer, keeps the aspect ratio correct on resize, and drives a
 // requestAnimationFrame loop that hands a dt (clamped to 0.1s) to the update fn.
@@ -27,7 +37,8 @@ export class Engine {
     this.scene.fog = new THREE.Fog(0x8fb8de, 70, 240);
 
     this.camera = new THREE.PerspectiveCamera(
-      90, window.innerWidth / window.innerHeight, 0.05, 500
+      vFovFor(BASE_HFOV, window.innerWidth / window.innerHeight),
+      window.innerWidth / window.innerHeight, 0.05, 500
     );
     this.camera.position.set(0, 1.6, 8);
 
@@ -70,6 +81,9 @@ export class Engine {
 
   _onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
+    // Recompute the vertical FOV from the new aspect so the horizontal FOV stays
+    // constant — a narrow window crops the sides instead of zooming in.
+    this.camera.fov = vFovFor(BASE_HFOV, this.camera.aspect);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
