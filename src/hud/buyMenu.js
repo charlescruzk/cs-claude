@@ -43,7 +43,7 @@ export class BuyMenu {
     this._shown = true;
     this.panel.style.display = 'flex';
     this._refresh();
-    this.input.canvas.exitPointerLock(); // free the mouse (the probe stubs this)
+    document.exitPointerLock(); // free the mouse so the panel can be clicked
   }
 
   close() {

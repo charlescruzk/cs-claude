@@ -3,6 +3,13 @@
 Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked after two
 attempts (write what you tried). Add a one-line note per task.
 
+## FIX_PROMPT_4 — RUN 1 (2026-09-06) — the blocker chain
+
+- [x] Task 1 — `exitPointerLock` is a Document method, not an Element method. `buyMenu.open()`
+  now calls `document.exitPointerLock()` (was `this.input.canvas.exitPointerLock()`, which
+  threw a TypeError on every `B` press and skipped `input.endFrame()` every frame — the
+  camera spun and the panel toggled every frame).
+
 ## RESUME — 2026-09-06 (diagnostic pass, `docs/FIX_PROMPT_2.md`)
 
 **State.** The P0/P1 build is **code-complete and logic-verified**: it was driven by hand
