@@ -72,10 +72,33 @@ export function makeColliderBoxes(colliders) {
 // into a diagnosis.
 export function makeFrameWatchdog(engine, input, status, round) {
   let lastFrames = 0;
+  // The baseline to restore on recovery. Captured on the first stall, not at
+  // construction: the healthy boot line main.js writes to #boot-status lands after
+  // the watchdog is built, so a construction-time capture would freeze the stale
+  // 'booting…' placeholder and a transient stall would leave that on screen forever.
+  let baseText = null;
+  let baseColor = null;
+  let warningShown = false; // the stall warning currently owns #boot-status
   setInterval(() => {
     const advancing = engine.frames > lastFrames;
     lastFrames = engine.frames;
+    // Recovery edge: the loop climbed again after a reported stall. Restore the
+    // baseline once, then drop the flag so a healthy loop never writes here — that
+    // would fight POINTER LOCK FAILED / UPDATE ERROR, which also own #boot-status.
+    if (advancing && warningShown) {
+      status.textContent = baseText;
+      status.style.color = baseColor;
+      warningShown = false;
+      return;
+    }
     if (!input.locked || advancing) return;
+    // Grab the baseline the first time so recovery can put back the healthy text we
+    // are about to displace; the flag keeps it live and un-recaptured on later ticks.
+    if (!warningShown) {
+      baseText = status.textContent;
+      baseColor = status.style.color;
+      warningShown = true;
+    }
     status.textContent =
           'FRAME LOOP STALLED\n' +
           `frames=${engine.frames} locked=${input.locked} ` +
