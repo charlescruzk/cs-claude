@@ -26,7 +26,7 @@ const AIR_WISH_CAP = 0.8;  // m/s — the cap that makes air-strafing work
 // The landing dip is a camera-local offset only — it never touches this.pos,
 // this.eye, or the shot origin. The head bob moved to the viewmodel: bobbing
 // the camera moves the whole world; bobbing the weapon does not.
-const LAND_DIP_MAX = 0.09;  // m — deepest landing dip, at a full-speed fall
+const LAND_DIP_MAX = 0.035; // m — deepest landing dip, at a full-speed fall
 const LAND_DIP_HALF = 0.18; // s — half-life of the landing dip recovery
 
 // Scratch box for the stand-height headroom test, reused every frame (the test

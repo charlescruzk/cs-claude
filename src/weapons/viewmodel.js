@@ -26,6 +26,12 @@ export class Viewmodel {
     this._build(camera);
     if (weapon) this._reshape(weapon.def);
     events.on('shot', this._onShot.bind(this));
+    // A landing reads as an impact through the gun: kick it by the impact speed.
+    // The camera dip was cut to a slight settle (LAND_DIP_MAX 0.035), so the
+    // weapon carries the cue instead.
+    events.on('land', (p) => {
+      this.kick += 0.05 * Math.min(1, ((p && p.speed) || 0) / 9);
+    });
    }
 
    // The gun rig sits low and to the right of the camera. The model itself comes
