@@ -17,6 +17,8 @@ import { resolveShot } from './weapons/hitscan.js';
 import { BotManager } from './bots/botManager.js';
 import { Hud } from './hud/hud.js';
 import { Hitmarker } from './hud/hitmarker.js';
+import { DamageNumbers } from './hud/damageNumbers.js';
+import { DamageDirection } from './hud/damageDirection.js';
 import { Scoreboard } from './hud/scoreboard.js';
 import { BuyMenu } from './hud/buyMenu.js';
 import { Round } from './game/round.js';
@@ -220,6 +222,11 @@ const scoreboard = new Scoreboard({ bots: botManager, round });
 const buyMenu = new BuyMenu(player, weapon, round, input);
 // Hitmarker: four ticks confirming a landed shot, driven by update(dt) like the HUD.
 const hitmarker = new Hitmarker();
+// Damage feedback: floating numbers over enemies you hit, and a red wedge at the
+// screen edge pointing at whoever just hurt you. Both are event-driven and idle
+// (a single length check) when nothing is happening.
+const damageNumbers = new DamageNumbers(engine.camera);
+const damageDirection = new DamageDirection(controller);
 
 // The buy menu deliberately releases pointer lock so the panel can be clicked;
 // the overlay must not re-arm on top of it. It re-arms when the menu closes.
@@ -248,7 +255,8 @@ const diagPanel = diagEnabled() ? makeDiagPanel(engine, input, round, controller
 
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
-  hud, hitmarker, round, scoreboard, buyMenu, projectiles, tactical, effects, audio, sfx,
+  hud, hitmarker, damageNumbers, damageDirection, round, scoreboard, buyMenu, projectiles,
+  tactical, effects, audio, sfx,
   net, remotePlayers, netMenu, settingsMenu,
   three: THREE.REVISION,
 };
@@ -292,6 +300,8 @@ engine.start((dt) => {
   hud.update(dt, { player, weapon, round, spread: weapon.currentSpread, scoped: weapon.scoped,
     whiteout: effects.whiteout, flash: effects.flash, tactical: tactical.ready() });
   hitmarker.update(dt);
+  damageNumbers.update(dt);
+  damageDirection.update(dt);
   // The buy menu runs unlocked so it stays live while its pointer-lock release is up.
   buyMenu.update(dt, input);
   input.endFrame();

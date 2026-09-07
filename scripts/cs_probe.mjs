@@ -407,6 +407,72 @@ async function main() {
      });
    console.log('\n=== BEHAVIOR (hit feedback) ===');
    console.log(hit && hit.result ? hit.result.value : '(hit feedback eval failed)');
+
+            // FIX_PROMPT_11 damage feedback: a player hit carries the attacker's
+            // position as a snapshot (not a live reference), floating damage
+            // numbers merge rapid hits on one target, and the near-death vignette
+            // stays capped so 5 HP is tense, not blinding.
+   const dmg = await send('Runtime.evaluate', {
+     expression: `(async () => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const cam = g.engine.camera; const bot = g.botManager.bots[0];
+        const p = g.player;
+        // --- Task 1: the attacker's position rides the hit event, as a snapshot ---
+        p.reset();
+        let captured = null;
+        const onHit = (e) => { if (e.target === 'player') captured = e; };
+        g.events.on('hit', onHit);
+        p.takeDamage(12, false, null, bot.name, bot.pos);
+        g.events.off('hit', onHit);
+        out.hitCarriesOrigin = !!captured
+           && Number.isFinite(captured.fromX) && Number.isFinite(captured.fromZ);
+        // The payload must be a snapshot: moving the bot after the event must not
+        // change what the listener saw. A live Vector3 reference would track it.
+        const fx = captured.fromX, fz = captured.fromZ;
+        const botPos = bot.pos.clone();
+        bot.pos.set(bot.pos.x + 100, 0, bot.pos.z + 100);
+        out.originIsSnapshot = captured.fromX === fx && captured.fromZ === fz;
+        bot.pos.copy(botPos);
+        // --- Task 2: floating damage numbers ---
+        const dn = g.damageNumbers;
+        const scratch = bot.box.min.clone(); cam.getWorldPosition(scratch);
+        const fwd = bot.pos.clone(); cam.getWorldDirection(fwd);
+        dn._clear();
+        bot.pos.set(scratch.x + fwd.x * 5, 0, scratch.z + fwd.z * 5);
+        g.events.emit('hit', { target: bot, damage: 10, headshot: false });
+        out.numberOnEnemyHit = dn._active.length === 1;
+        dn._clear();
+        for (let i = 0; i < 8; i++) {
+          g.events.emit('hit', { target: bot, damage: 10, headshot: false });
+        }
+        out.pelletsMergeToOne = dn._active.length === 1;
+        dn._clear();
+        bot.pos.set(scratch.x - fwd.x * 5, 0, scratch.z - fwd.z * 5);
+        g.events.emit('hit', { target: bot, damage: 10, headshot: false });
+        out.behindCameraSkipped = dn._active.length === 0;
+        dn._clear();
+        // --- Task 3: a threat wedge needs an origin; without one, show nothing ---
+        const dd = g.damageDirection;
+        dd._clear();
+        g.events.emit('hit', { target: 'player', damage: 10, headshot: false });
+        out.noOriginNoWedge = dd._active.length === 0;
+        dd._clear();
+        // --- Task 4: the near-death vignette is capped at 0.55 ---
+        p.health = 1; p.alive = true;
+        const base = { player: p, weapon: g.weapon, round: g.round,
+          spread: 0, scoped: false, whiteout: 0, flash: 0 };
+        g.hud.update(0.016, Object.assign({ tactical: false }, base));
+        out.vignetteCappedAtLowHealth =
+           parseFloat(g.hud.lowHp.style.opacity) <= 0.55;
+        p.health = 100;
+        return out;
+        })()`,
+     returnByValue: true,
+     awaitPromise: true,
+     });
+   console.log('\n=== BEHAVIOR (damage feedback) ===');
+   console.log(dmg && dmg.result ? dmg.result.value : '(damage feedback eval failed)');
    ws.close();
 
    try { server.kill('SIGKILL'); } catch { /* already gone */ }
