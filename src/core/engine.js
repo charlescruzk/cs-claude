@@ -20,7 +20,7 @@ export class Engine {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8fb8de); // pale sky
@@ -33,10 +33,15 @@ export class Engine {
 
     this.clock = new THREE.Clock();
 
-    // Soft ambient fill from the hemisphere + a directional "sun".
-    this.hemisphere = new THREE.HemisphereLight(0xbcd3f0, 0x4a4036, 0.45);
+    // Ambient fill from the hemisphere + a directional "sun". The hemisphere is the
+    // ONLY light reaching surfaces out of direct sun, so its intensity sets how far
+    // shadows crush. At 0.45 against a 3.2 sun the shadow side went unreadable, which
+    // is a gameplay problem before it is a looks problem. Lifted to a ~2.6:1 ratio and
+    // the ground tint warmed, as a stand-in for the bounce light Stage C will bake —
+    // once the GI volume lands, this fill should come back down.
+    this.hemisphere = new THREE.HemisphereLight(0xbcd3f0, 0x6f6357, 1.15);
     this.scene.add(this.hemisphere);
-    this.sun = new THREE.DirectionalLight(0xfff2e0, 3.2);
+    this.sun = new THREE.DirectionalLight(0xfff2e0, 3.0);
     this.sun.position.set(60, 90, 40);
     this.scene.add(this.sun);
 
