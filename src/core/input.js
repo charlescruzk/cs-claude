@@ -2,6 +2,15 @@
 // accumulated since the last frame, and the state of the three mouse buttons.
 // Pointer lock is requested on a canvas/overlay click so the mouse becomes
 // relative movement. beginFrame/endFrame reset the per-frame values.
+
+// A real flick is well under this many pixels in one event. Anything larger is an
+// OS artefact — a pointer-lock transition, a focus change, a display switch — not a
+// player turning, and applying it snaps the view a full turn.
+const MAX_MOVE = 180;
+// Events to discard right after the lock engages: Chrome's first mousemove after
+// requestPointerLock can carry the jump from the old cursor position.
+const LOCK_SETTLE = 2;
+
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -12,6 +21,7 @@ export class Input {
     this._pressed = new Set();              // codes that went down since last endFrame
     this._downCodes = new Set();            // codes currently held (edge detection)
     this.locked = false;
+    this._settle = 0; // mousemove events still to discard after a fresh lock
     this._onLockChange = null;              // callback(locked), set by main.js
     this._onLockError = null;                   // callback(msg), set by main.js
     this._bind();
@@ -72,13 +82,20 @@ export class Input {
      });
      // Only accumulate movement while locked, so a click-to-lock never injects a delta.
     document.addEventListener('mousemove', (e) => {
-      if (this.locked) {
-        this.mouseDX += e.movementX;
-        this.mouseDY += e.movementY;
-       }
+      if (!this.locked) return;
+      // Discard the first events after a lock: the first one carries the jump from
+      // the old cursor position and would snap the view.
+      if (this._settle > 0) { this._settle -= 1; return; }
+      const dx = e.movementX;
+      const dy = e.movementY;
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+      if (Math.abs(dx) > MAX_MOVE || Math.abs(dy) > MAX_MOVE) return; // OS artefact
+      this.mouseDX += dx;
+      this.mouseDY += dy;
      });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas;
+      if (this.locked) this._settle = LOCK_SETTLE;
       if (this._onLockChange) this._onLockChange(this.locked);
      });
       // A refused lock must not die silently: the whole game is gated on pointer
