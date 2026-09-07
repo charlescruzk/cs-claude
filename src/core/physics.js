@@ -24,12 +24,11 @@ function playerBox(pos, radius, height, out) {
 // A box whose top is within STEP of the feet is not a horizontal obstacle: the
 // player walks or jumps over it instead of being blocked. This is what lets a
 // 1 m crate be jumped onto (peak jump ~1.3 m) while a 2 m wall still blocks.
-const STEP = 0.6;
+export const STEP = 0.6;
 
 // Push `pos` (feet) out of every overlapping collider, resolved X then Z then Y.
 // Returns true when the player is standing on a box top.
 export function resolveCapsuleVsBoxes(pos, radius, height, colliders, opts = {}) {
-  const vy = opts.vy || 0;
   let grounded = false;
 
     // --- horizontal: resolve each overlap along its axis of least penetration ---
@@ -66,41 +65,66 @@ export function resolveCapsuleVsBoxes(pos, radius, height, colliders, opts = {})
   return grounded;
 }
 
-// Are we standing on a box top, or on the floor plane at y = floorY?
-export function groundCheck(pos, radius, height, colliders, floorY = 0) {
-  if (pos.y <= floorY + 0.02) return true;
-  for (const c of colliders) {
-    if (c.max.y > pos.y + 0.05 || c.max.y < pos.y - 0.05) continue;
-    if (
-      pos.x + radius > c.min.x && pos.x - radius < c.max.x &&
-      pos.z + radius > c.min.z && pos.z - radius < c.max.z
-     ) {
-      return true;
-     }
-   }
-  return false;
-}
-
-// Ray-vs-AABB slab test. Returns the entry distance in [0, maxT], or null on a miss.
-// `dir` must be normalized.
-export function rayAABB(origin, dir, min, max, maxT = Infinity) {
+// rayAABB(origin, dir, min, max, maxT = Infinity, outHit = null) -> number | null
+// Returns the entry distance as before. When `outHit` is supplied it is filled with
+// { axis: 0|1|2, sign: -1|1 } describing the face that was crossed, so the caller can
+// build a surface normal without a second test. Pass a module-level scratch object;
+// do not allocate one per call. `dir` must be normalized.
+export function rayAABB(origin, dir, min, max, maxT = Infinity, outHit = null) {
   let tmin = 0;
   let tmax = maxT;
-  for (const axis of ['x', 'y', 'z']) {
-    const o = origin[axis];
-    const d = dir[axis];
-    if (Math.abs(d) < 1e-8) {
-       // Parallel to this axis: a hit is only possible if the origin is in slab.
-      if (o < min[axis] || o > max[axis]) return null;
-     } else {
-      const inv = 1 / d;
-      let t1 = (min[axis] - o) * inv;
-      let t2 = (max[axis] - o) * inv;
-      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-      if (t1 > tmin) tmin = t1;
-      if (t2 < tmax) tmax = t2;
-      if (tmin > tmax) return null;
-     }
-   }
+  let hitAxis = -1; // -1: ray started inside the box, no face crossed
+  let hitSign = 0;
+
+  // --- x slab ---
+  const ox = origin.x;
+  const dx = dir.x;
+  if (Math.abs(dx) < 1e-8) {
+    // Parallel to this axis: a hit is only possible if the origin is in slab.
+    if (ox < min.x || ox > max.x) return null;
+  } else {
+    const inv = 1 / dx;
+    let t1 = (min.x - ox) * inv;
+    let t2 = (max.x - ox) * inv;
+    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+    if (t1 > tmin) { tmin = t1; hitAxis = 0; hitSign = dx > 0 ? -1 : 1; }
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+
+  // --- y slab ---
+  const oy = origin.y;
+  const dy = dir.y;
+  if (Math.abs(dy) < 1e-8) {
+    if (oy < min.y || oy > max.y) return null;
+  } else {
+    const inv = 1 / dy;
+    let t1 = (min.y - oy) * inv;
+    let t2 = (max.y - oy) * inv;
+    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+    if (t1 > tmin) { tmin = t1; hitAxis = 1; hitSign = dy > 0 ? -1 : 1; }
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+
+  // --- z slab ---
+  const oz = origin.z;
+  const dz = dir.z;
+  if (Math.abs(dz) < 1e-8) {
+    if (oz < min.z || oz > max.z) return null;
+  } else {
+    const inv = 1 / dz;
+    let t1 = (min.z - oz) * inv;
+    let t2 = (max.z - oz) * inv;
+    if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+    if (t1 > tmin) { tmin = t1; hitAxis = 2; hitSign = dz > 0 ? -1 : 1; }
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+
+  if (outHit) {
+    outHit.axis = hitAxis;
+    outHit.sign = hitSign;
+  }
   return tmin;
 }
