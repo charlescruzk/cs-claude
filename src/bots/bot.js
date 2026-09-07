@@ -12,6 +12,7 @@ const FIRE_RATE = 0.25; // fire every 0.25 s while engaged
 const BOT_DAMAGE = 12;  // damage per hit
 const MISS = 0.2;       // 20% of shots miss
 const LOSE_LOS = 2.0;   // disengage 2 s after losing sight
+const BLIND_HEAVY = 1.575; // s — 0.45 × BLIND_MAX (3.5) in effects.js; above this the bot cannot see
 const EYE = 1.6;        // bot eye height
 const RADIUS = 0.4;
 const HEIGHT = 1.8;
@@ -36,6 +37,7 @@ export class Bot {
     this.fireTimer = 0;
     this.losTimer = 0;
     this.hasLOS = false;
+    this.blindTimer = 0;
     this.pos = new THREE.Vector3();
     this.vy = 0;
     this.grounded = true;
@@ -60,6 +62,7 @@ export class Bot {
     this.fireTimer = 0;
     this.losTimer = 0;
     this.hasLOS = false;
+    this.blindTimer = 0; // a respawned bot is never blind (G8)
     this._wp = -1;
     this.pickTarget();
     this.ragdoll = null;
@@ -71,6 +74,7 @@ export class Bot {
 
   update(dt, player, colliders) {
     if (this.dead) return;
+    if (this.blindTimer > 0) this.blindTimer = Math.max(0, this.blindTimer - dt);
     this._detect(player, colliders, dt);
     if (this.state === 'engage') this._engage(dt, player);
     else this._patrol(dt);
@@ -79,8 +83,11 @@ export class Bot {
     }
 
      // See the player? alive, in range, and an unobstructed eye-to-eye ray.
+     // A heavily blinded bot cannot see at all — force hasLOS false so it drops
+     // to patrol and stops shooting entirely.
   _detect(player, colliders, dt) {
-    if (player.state.alive && this._lineOfSight(player, colliders)) {
+    const blind = this.blindTimer > BLIND_HEAVY;
+    if (!blind && player.state.alive && this._lineOfSight(player, colliders)) {
       this.hasLOS = true;
       this.losTimer = 0;
       this.state = 'engage';
@@ -113,12 +120,18 @@ export class Bot {
     this.fireTimer -= dt;
     if (this.fireTimer <= 0) {
       this.fireTimer = FIRE_RATE;
-      if (Math.random() > MISS) player.state.takeDamage(BOT_DAMAGE, false, null, this.name, this.pos);
+      // Recovering from a flash: accuracy is wrecked, easing back to normal as
+      // the blind timer runs out. Heavily blind bots never reach here (no LOS).
+      const miss = this.blindTimer > 0
+        ? MISS + (0.95 - MISS) * (this.blindTimer / BLIND_HEAVY) : MISS;
+      if (Math.random() > miss) player.state.takeDamage(BOT_DAMAGE, false, null, this.name, this.pos);
       }
     }
 
      // Walk toward the current waypoint, sliding off walls like the player.
+     // A heavily blinded bot holds position instead of walking through the smoke.
   _patrol(dt) {
+    if (this.blindTimer > BLIND_HEAVY) return;
     if (this._wp < 0) this.pickTarget();
     const wp = waypoints[this._wp];
      _move.set(wp[0] - this.pos.x, 0, wp[1] - this.pos.z);
@@ -155,6 +168,12 @@ export class Bot {
     // Turn so the bot's forward (-Z) points at (x, z).
   _face(x, z) {
     this.yaw = Math.atan2(-(x - this.pos.x), -(z - this.pos.z));
+    }
+
+    // Blind this bot for `seconds`. Takes the longer of the current and new
+    // value: a second flash should not cut short the first.
+  blind(seconds) {
+    this.blindTimer = Math.max(this.blindTimer, seconds);
     }
 
   takeDamage(amount, headshot, weapon) {
