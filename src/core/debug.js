@@ -9,6 +9,15 @@ export function debugEnabled() {
   return DEBUG;
 }
 
+// A parallel ?diag=1 flag: a live state panel (makeDiagPanel) instead of the FPS /
+// collider overlay. Without the flag DIAG is false and the setup no-ops, so the
+// plain page shows neither the FPS readout nor the diagnostic panel.
+const DIAG = new URLSearchParams(location.search).get('diag') === '1';
+
+export function diagEnabled() {
+  return DIAG;
+}
+
 // A fixed-position FPS readout, updated each frame with a rolling 30-frame average.
 // The element is created here (never in index.html), so it exists only when debug is
 // on. Returns an `update(dt)` the caller runs once per frame.
@@ -76,4 +85,38 @@ export function makeFrameWatchdog(engine, input, status, round) {
     status.style.color = '#ff6b6b';
     status.style.whiteSpace = 'pre-wrap';
     }, 1000);
+}
+
+// A ?diag=1 live state panel: a fixed div, created here (never in index.html) and
+// refreshed every frame with the same fields the watchdog reports, plus fps and the
+// player position, so a frozen game shows its own state instead of a dead frame.
+// It returns an update(dt) the caller runs once per frame; inert without the flag.
+export function makeDiagPanel(engine, input, round, controller) {
+  const el = document.createElement('div');
+  el.style.position = 'fixed';
+  el.style.bottom = '8px';
+  el.style.left = '8px';
+  el.style.zIndex = '999';
+  el.style.padding = '4px 6px';
+  el.style.font = '12px/1.3 monospace';
+  el.style.color = '#0ff';
+  el.style.background = 'rgba(0, 0, 0, 0.6)';
+  el.style.whiteSpace = 'pre';
+  document.body.appendChild(el);
+
+  const samples = []; // rolling dt window, a rolling fps like makeFpsCounter
+  return (dt) => {
+    samples.push(dt);
+    if (samples.length > 30) samples.shift();
+    const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+    const fps = avg > 0 ? Math.round(1 / avg) : 0;
+    const lockEl = document.pointerLockElement ? document.pointerLockElement.id : 'null';
+    const p = controller.pos;
+    el.textContent =
+             `fps=${fps} frames=${engine.frames} locked=${input.locked}\n` +
+             `lockEl=${lockEl} visibility=${document.visibilityState}\n` +
+             `round=${round.state} t=${round.time.toFixed(1)} ` +
+             `pos=(${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}) ` +
+             `updateErrored=${engine._reportedError}`;
+     };
 }

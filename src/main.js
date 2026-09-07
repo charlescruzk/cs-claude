@@ -23,7 +23,8 @@ import { ProjectileManager } from './game/projectile.js';
 import { Tactical } from './weapons/tactical.js';
 import { Effects } from './game/effects.js';
 import { spawnFor } from './game/teams.js';
-import { debugEnabled, makeFpsCounter, makeColliderBoxes, makeFrameWatchdog } from './core/debug.js';
+import { debugEnabled, makeFpsCounter, makeColliderBoxes, makeFrameWatchdog,
+         diagEnabled, makeDiagPanel } from './core/debug.js';
 
 const status = document.getElementById('boot-status');
 const canvas = document.getElementById('game-canvas');
@@ -120,6 +121,10 @@ const effects = new Effects({
   player: controller, getTargets: () => botManager.targets(),
 });
 
+// ?diag=1: a live state panel (fps/frames/locked/pointerLockElement/visibility/
+// round/player pos/update error), refreshed each frame; inert without the flag.
+const diagPanel = diagEnabled() ? makeDiagPanel(engine, input, round, controller) : () => {};
+
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
   hud, round, scoreboard, buyMenu, projectiles, tactical, effects,
@@ -153,6 +158,7 @@ engine.start((dt) => {
   buyMenu.update(dt, input);
   input.endFrame();
   fps(dt);
+  diagPanel(dt);
 });
 
 // Watchdog (debug.js): a silent stall while locked becomes an on-screen diagnosis.
