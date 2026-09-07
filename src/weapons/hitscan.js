@@ -10,7 +10,8 @@ const _result = { kind: 'wall', t: 0, target: null, headshot: false };
 // array of { box, headBox, onHit(damage, headshot, weapon) }; `weapon` supplies the
 // base damage and is threaded to the target so its 'kill' event carries the weapon.
 // Returns the nearest hit { kind, t, target?, headshot? } or null. A
-// nearer wall shadows a bot behind it, so a crate blocks the shot. Emits 'hit'.
+// nearer wall shadows a bot behind it, so a crate blocks the shot. Emits 'hit'
+// only for targets whose onHit does not emit it themselves (remote players).
 export function resolveShot(origin, dir, colliders, targets, weapon) {
    let nearestT = Infinity;
    let result = null;
@@ -60,6 +61,13 @@ export function resolveShot(origin, dir, colliders, targets, weapon) {
       // A bot was the nearest hit: apply damage (4x on the head) and report it.
     const damage = weapon.damage * (result.headshot ? 4 : 1);
     result.target.onHit(damage, result.headshot, weapon);
-    events.emit('hit', { target: result.target, damage, headshot: result.headshot });
+    // A bot's onHit is takeDamage, which emits 'hit' itself — and must, because
+    // grenade blast damage reaches takeDamage directly without passing through
+    // hitscan. A remote player's onHit only reports the hit upward and emits
+    // nothing, so the local feedback event is ours to fire here. Exactly one
+    // 'hit' per damage instance from every source.
+    if (result.target.reportHit) {
+      events.emit('hit', { target: result.target, damage, headshot: result.headshot });
+    }
     return result;
    }
