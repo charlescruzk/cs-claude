@@ -458,6 +458,52 @@ async function main() {
         g.events.emit('hit', { target: 'player', damage: 10, headshot: false });
         out.noOriginNoWedge = dd._active.length === 0;
         dd._clear();
+        // --- FIX_PROMPT_12: the threat indicator is an edge-anchored glow ---
+        // The glow element is a full-viewport square (200vmax), so its bounding
+        // box is at least the viewport's larger dimension — not a small wedge.
+        const px = g.controller.pos.x, pz = g.controller.pos.z;
+        g.events.emit('hit', { target: 'player', damage: 10, headshot: false,
+          fromX: px + 1, fromZ: pz });
+        const rect = dd._active[0].el.getBoundingClientRect();
+        const vmax = Math.max(window.innerWidth, window.innerHeight);
+        out.glowIsEdgeAnchored = rect.width >= vmax && rect.height >= vmax;
+        dd._clear();
+        // The gradient's final colour stop must sit at or before 55% of the
+        // gradient ray, so the glow provably cannot reach the middle of the
+        // screen. Parse the injected stylesheet, not the live element.
+        const styleEl = document.getElementById('damage-direction-style');
+        const css = styleEl ? styleEl.textContent : '';
+        // NOTE: the regex backslashes are doubled because this whole block is a
+        // template literal — a single \s would be dropped to s before the browser
+        // ever sees it.
+        const stops = [...css.matchAll(/rgba\\([^)]*\\)\\s+([\\d.]+)%/g)]
+          .map((m) => parseFloat(m[1]));
+        const lastStop = stops.length ? stops[stops.length - 1] : 100;
+        out.centreStaysClear = lastStop <= 55;
+        // A 50-damage hit must read brighter than a 10-damage hit from the same
+        // bearing (same angle, so the only difference is the damage scale).
+        g.events.emit('hit', { target: 'player', damage: 10, headshot: false,
+          fromX: px + 1, fromZ: pz });
+        const lowOp = parseFloat(dd._active[0].el.style.opacity);
+        dd._clear();
+        g.events.emit('hit', { target: 'player', damage: 50, headshot: false,
+          fromX: px + 1, fromZ: pz });
+        const highOp = parseFloat(dd._active[0].el.style.opacity);
+        out.opacityScalesWithDamage = highOp > lowOp;
+        dd._clear();
+        // Four hits from four bearings (right, left, behind, ahead) must not
+        // white out the screen: the summed opacity of all live glows is capped.
+        g.events.emit('hit', { target: 'player', damage: 50, headshot: false,
+          fromX: px + 1, fromZ: pz });
+        g.events.emit('hit', { target: 'player', damage: 50, headshot: false,
+          fromX: px - 1, fromZ: pz });
+        g.events.emit('hit', { target: 'player', damage: 50, headshot: false,
+          fromX: px, fromZ: pz + 1 });
+        g.events.emit('hit', { target: 'player', damage: 50, headshot: false,
+          fromX: px, fromZ: pz - 1 });
+        const sum = dd._active.reduce((s, w) => s + parseFloat(w.el.style.opacity), 0);
+        out.fourDirectionsCapped = sum <= 0.6;
+        dd._clear();
         // --- Task 4: the near-death vignette is capped at 0.55 ---
         p.health = 1; p.alive = true;
         const base = { player: p, weapon: g.weapon, round: g.round,
