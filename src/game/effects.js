@@ -19,6 +19,15 @@ const FLASH_RANGE = 20;     // m, how far a flash can whiteout
 const _eye = new THREE.Vector3();
 const _ray = new THREE.Vector3();
 
+// One geometry and four materials, built once at startup and reused by every
+// explosion. Each pooled mesh gets its own material so two simultaneous
+// explosions never fight over a shared opacity.
+const _explosionGeo = new THREE.SphereGeometry(1, 16, 12);
+const _explosionMats = Array.from({ length: 4 }, () => new THREE.MeshBasicMaterial({
+  color: 0xff5500, transparent: true, opacity: 1,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+
 export class Effects {
   constructor({ scene, colliders, player, getTargets }) {
     this.scene = scene;
@@ -30,6 +39,15 @@ export class Effects {
     this._whiteoutLeft = 0;
     this._flashLeft = 0;
     this._explosions = [];      // { mesh, life } fading spheres
+    // Pool of 4 explosion meshes sharing the one geometry; each gets its own
+    // material so two simultaneous explosions don't fight over a shared opacity.
+    this._pool = [];
+    for (let i = 0; i < 4; i++) {
+      const mesh = new THREE.Mesh(_explosionGeo, _explosionMats[i]);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this._pool.push(mesh);
+      }
     events.on('tactical', (e) => this._onTactical(e));
    }
 
@@ -39,9 +57,7 @@ export class Effects {
       const ex = this._explosions[i];
       ex.life -= dt;
       if (ex.life <= 0) {
-        this.scene.remove(ex.mesh);
-        ex.mesh.geometry.dispose();
-        ex.mesh.material.dispose();
+        ex.mesh.visible = false;
         this._explosions.splice(i, 1);
         continue;
         }
@@ -103,17 +119,13 @@ export class Effects {
     }
 
        // An emissive sphere at the impact that grows to the blast radius and fades
-      // out over EXPLOSION_T, then is removed from the scene.
+      // out over EXPLOSION_T, then is returned to the pool.
    _spawnExplosion(pos) {
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 16, 12),
-      new THREE.MeshBasicMaterial({
-        color: 0xff5500, transparent: true, opacity: 1,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-         }));
-    mesh.position.copy(pos);
+    const mesh = this._pool.find((m) => !m.visible) ?? this._explosions[0].mesh;
     mesh.scale.setScalar(0.3);
-    this.scene.add(mesh);
+    mesh.material.opacity = 1;
+    mesh.position.copy(pos);
+    mesh.visible = true;
     this._explosions.push({ mesh, life: EXPLOSION_T });
     }
 }
