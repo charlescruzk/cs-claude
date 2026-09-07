@@ -106,6 +106,34 @@ browser, that is a bug to report, not a look to adjust. Needs a human by eye: no
 visual is expected to change; confirm bots look identical, explosions look identical, and
 crouch-under-overhang behaviour is unchanged.
 
+## PHASE2_STAGE_B — RUN B1 (2026-09-06) — procedural geometry library and chamfered map
+
+- [x] Task 1 — `src/geo/shapes.js` (new): `beveledBox(w, h, d, chamfer)` and
+  `boxProjectUvs(geo, metresPerTile)`. **The task's beveledBox as written did NOT measure
+  exactly w×h×d** — verified in headless Chrome (real three r170 via the importmap):
+  `beveledBox(1,1,1)` came out **1.08 × 1 × 1.08**. ExtrudeGeometry places the body at
+  `bs = bevelSize + bevelOffset`; with `bevelOffset: 0` the body is expanded by `c` on every
+  side (the bevelVec at the chamfer corners is exactly `(1,0)`/`(0,1)`, so the expansion is
+  exactly `2c`). Fixed with `bevelOffset: -c`, which puts the body on the original shape
+  (exact w×d) and contracts the top/bottom faces by `c` — the correct chamfer look. Re-verified
+  in headless Chrome: `beveledBox(1,1,1,0.04)`, `(2,1,3,0.04)`, `(1,1,1,0.02)`, `(0.4,0.4,0.4,0.015)`
+  all measure exactly w×h×d, centred at the origin. `boxProjectUvs` verified to run and give
+  the expected density (1 m box at 2 m/tile → UV span 0.5, range ±0.25).
+- [x] Task 2 — chamfer the map. `mapBuilder.js` builds each box with
+  `beveledBox(w, h, d, Math.min(w,h,d) < 1.5 ? 0.02 : 0.04)` and `boxProjectUvs(geo, 2)`;
+  deleted `scaleBoxUvs` and `scaleUvs` (both now dead). Floor keeps `PlaneGeometry` but uses
+  `boxProjectUvs(floorGeo, 2)` and the material's `map`/`roughnessMap` repeat is now 1×1 —
+  every surface in the game uses one rule: one tile per 2 m carried in the UVs. **Colliders
+  untouched** — still built from `mapData.boxes` in their own loop, same count/order/values.
+
+**Verification (RUN B1):** `npm run check` 29/29 (new file); `npm run probe` exception-free
+with every P1-1..P1-7 behaviour block green and identical to the pre-change baseline —
+especially P1-1 (sniper one-shot, shotgun `shotLanded: 4`), which would change if hit boxes
+or colliders had shifted. Needs a human by eye: whether the chamfers catch light, whether
+tiling is seamless across the chamfer strips, and whether the 2 cm vs 4 cm chamfer split
+reads right on crates vs walls. The bounding-box verification was done in headless Chrome
+against the real r170 importmap, not by hand.
+
 ## PHASE2_STAGE_A — RUN A1 (2026-09-06) — PBR materials and renderer output
 
 - [x] Task 1 — PBR materials with procedural roughness maps. `textures.js` gained
