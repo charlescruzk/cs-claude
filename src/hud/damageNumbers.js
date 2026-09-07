@@ -74,7 +74,9 @@ export class DamageNumbers {
     // Project the target's chest to screen space. NDC z > 1 means the point is
     // behind the camera — never place a number for an enemy you cannot see.
     _proj.set(t.pos.x, t.pos.y + CHEST_H, t.pos.z);
-    this._camera.project(_proj);
+    // Three.js projects a vector THROUGH a camera: vector.project(camera).
+    // camera.project() does not exist — calling it throws on every hit.
+    _proj.project(this._camera);
     if (_proj.z > 1) return;
     const x = (_proj.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-_proj.y * 0.5 + 0.5) * window.innerHeight;
