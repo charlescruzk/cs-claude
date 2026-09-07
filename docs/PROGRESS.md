@@ -13,6 +13,11 @@ attempts (write what you tried). Add a one-line note per task.
   site fails. Confirmed the probe can fail: with the old broken call temporarily restored in
   `buyMenu.js:46`, `npm run probe` reported the P1-4 buy block as `undefined` (the `open()`
   TypeError), then the fix was restored.
+- [x] Task 3 — lock overlay stays hidden while the buy menu is open. `_onLockChange` now
+  keeps the overlay hidden when `buyMenu._shown` is true, and the handler was **moved** below
+  the `buyMenu` declaration (`main.js:112`) so the reference resolves. `close()` needs no
+  extra code: a successful re-lock hides the overlay via `_onLockChange(true)`, a failed one
+  re-arms it.
 
 ## RESUME — 2026-09-06 (diagnostic pass, `docs/FIX_PROMPT_2.md`)
 

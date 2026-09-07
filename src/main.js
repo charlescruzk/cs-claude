@@ -36,7 +36,6 @@ const input = new Input(canvas);
 engine.onError = (err) => { status.textContent = 'UPDATE ERROR: ' + err.message; status.style.color = '#ff6b6b'; };
 
 overlay.addEventListener('click', () => input.requestLock());
-input._onLockChange = (locked) => overlay.classList.toggle('hidden', locked);
 // A refused pointer lock must not die silently: the whole game is gated on it, so
 // report the failure on screen the way index.html reports a boot error.
 input._onLockError = (msg) => {
@@ -109,6 +108,12 @@ const scoreboard = new Scoreboard({ bots: botManager, round });
 // Buy menu: a freeze-phase panel (B) for Kevlar / Kevlar+Helmet / Magazine Pack.
 // It runs outside the locked block so it works while its pointer-lock release is up.
 const buyMenu = new BuyMenu(player, weapon, round, input);
+
+// The buy menu deliberately releases pointer lock so the panel can be clicked;
+// the overlay must not re-arm on top of it. It re-arms when the menu closes.
+input._onLockChange = (locked) => {
+  overlay.classList.toggle('hidden', locked || buyMenu._shown);
+};
 
 // Thrown tacticals: G/H spawn an arcing frag or flash into the ProjectileManager,
 // which integrates and detonates them. The effects themselves land in P1-6.
