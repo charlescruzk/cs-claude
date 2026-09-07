@@ -9,6 +9,10 @@ const CH_REF = 0.05;   // spread that reaches CH_MAX
 const FEED_MAX = 5;    // kill-feed lines kept on screen
 const FEED_TTL = 5;    // seconds a line stays solid before it fades
 const VIGNETTE_TTL = 0.35; // how long the red flash eases out
+const LOW_HP_AT = 40;        // below this health the near-death vignette appears
+const LOW_HP_MAX = 0.55;    // peak opacity cap — desperate, never blindfolded
+const LOW_HP_FREQ_MIN = 1.1; // pulse Hz at 40 HP
+const LOW_HP_FREQ_MAX = 2.0; // pulse Hz near death
 
 function fmtTime(sec) {
   const s = Math.max(0, Math.ceil(sec));
@@ -33,6 +37,9 @@ export class Hud {
     this.weaponName = document.getElementById('weapon-name');
     this.killfeed = document.getElementById('killfeed');
     this.vignette = document.getElementById('vignette');
+    this.lowHp = document.getElementById('lowhp-vignette');
+    this._lowHpOpacity = 0; // last written opacity, so a healthy player writes nothing
+    this._lowHpTime = 0;    // pulse phase accumulator
     this.scope = document.getElementById('scope-overlay');
     this.whiteout = document.getElementById('whiteout');
     this.flashEl = document.getElementById('impact-flash');
@@ -94,6 +101,24 @@ export class Hud {
        // Status (bottom-left).
     const hp = Math.max(0, Math.round(player.health));
     const ar = Math.max(0, Math.round(player.armor));
+
+       // Near-death vignette: below 40 HP a red vignette closes in, pulsing like a
+    // heartbeat (1.1 Hz at 40 HP rising to 2.0 Hz near death). Derived from health
+    // each frame, so it clears the instant health resets (respawn / round reset)
+    // with no explicit reset. The opacity is capped at LOW_HP_MAX and the gradient
+    // keeps the central 40% clear, so 5 HP reads as desperate, not blindfolded.
+    let lowOpacity = 0;
+    if (hp < LOW_HP_AT) {
+      const lowFactor = Math.min(1, (LOW_HP_AT - hp) / (LOW_HP_AT - 1));
+      this._lowHpTime += dt;
+      const freq = LOW_HP_FREQ_MIN + lowFactor * (LOW_HP_FREQ_MAX - LOW_HP_FREQ_MIN);
+      const pulse = 0.5 + 0.5 * Math.sin(this._lowHpTime * 2 * Math.PI * freq);
+      lowOpacity = LOW_HP_MAX * lowFactor * (0.7 + 0.3 * pulse);
+    }
+    if (this.lowHp && lowOpacity !== this._lowHpOpacity) {
+      this.lowHp.style.opacity = lowOpacity.toFixed(3);
+      this._lowHpOpacity = lowOpacity;
+    }
     this.healthNum.textContent = hp;
     this.armorNum.textContent = ar;
     this.healthBar.style.width = `${Math.min(100, hp)}%`;

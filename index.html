@@ -36,6 +36,12 @@
     #vignette { inset: 0; pointer-events: none; opacity: 0;
                 background: radial-gradient(ellipse at center, rgba(255,0,0,0) 45%,
                               rgba(160,0,0,.55) 100%); transition: opacity .08s linear; }
+    /* Near-death vignette (P1-8): a sibling of #vignette so the damage flash and
+       this effect compose instead of overwriting each other. The gradient keeps the
+       central 40% clear; the element opacity (capped at 0.55 in hud.js) is the peak. */
+    #lowhp-vignette { inset: 0; pointer-events: none; opacity: 0;
+                background: radial-gradient(ellipse at center, rgba(120,0,0,0) 40%,
+                              rgba(120,0,0,.9) 100%); transition: opacity .08s linear; }
     /* Crosshair: four bars pushed out from center by the current spread. */
     #crosshair { inset: 0; }
     #crosshair .ch { position: absolute; left: 50%; top: 50%;
@@ -141,6 +147,7 @@
   <canvas id="game-canvas"></canvas>
   <div id="hud">
    <div id="vignette"></div>
+   <div id="lowhp-vignette"></div>
    <div id="crosshair">
       <div class="ch up"></div>
       <div class="ch down"></div>
