@@ -66,6 +66,46 @@ unchanged. Needs a human by eye: draw-call count (`renderer.info.render.calls` s
 from ~45 to well under 12), texel density consistent on a 61 m wall vs a 1 m crate, grounded
 shadows with no acne / no peter-panning, and the softer 1× edges vs `?rs=2`.
 
+## PHASE2_STAGE_A — RUN A3 (2026-09-06) — ray infrastructure and allocation sweep
+
+- [x] Task 6 — allocation-free `rayAABB` that reports the hit face. `physics.js` unrolls the
+  x/y/z slabs (no `['x','y','z']` array, no string lookups), tracks which axis won and the
+  entry sign, and writes `{ axis, sign }` into an optional sixth `outHit` argument. Return
+  contract unchanged (`number | null`); no caller changed. Also deleted `groundCheck` (zero
+  call sites — grep confirmed) and the dead `opts.vy` destructure, and exported `STEP` (0.6,
+  value unchanged) for Task 9.
+- [x] Task 7 — share bot geometries and materials across all bots. `bot.js` hoists three
+  shared geometries (body 0.8×1.8×0.8, head 0.4×0.4×0.4, nose 0.12×0.12×0.25) and a lazy
+  per-team-colour material Map plus one shared nose material to module scope; `_build` now
+  reuses them. All sizes, positions (body y=0.9, head y=2.0, nose (0,1.3,-0.5)), colours,
+  roughness 0.65 / metalness 0.0, and cast/receiveShadow flags identical. Nose colour kept
+  at the original `0x222222` — the task text's `0x222228` is the viewmodel gunmetal value
+  (doc typo); "keep the same colours" wins. Nothing is disposed.
+- [x] Task 8 — pool the explosion mesh. `effects.js` builds one `SphereGeometry(1,16,12)` and
+  four `MeshBasicMaterial`s at module scope, plus a pool of 4 meshes in the constructor
+  (added to the scene, `visible=false`). `_spawnExplosion` reuses the first free pooled mesh
+  (resets scale 0.3, opacity 1, position, `visible=true`); `update()` hides it on expiry.
+  No geometry or material is constructed or disposed after startup. Timings/constants
+  unchanged (EXPLOSION_T 0.3, scale 0.3→FRAG_RADIUS, opacity 1→0, AdditiveBlending,
+  depthWrite false).
+- [x] Task 9 — scratch vectors and shared STEP in the headroom check. `playerController.js`
+  hoists a module-level `{ min, max }` scratch box (`_standBox`) reused every frame instead
+  of two fresh `Vector3`s, and replaces the hardcoded `0.6` with the `STEP` constant imported
+  from `core/physics.js`. Behaviour unchanged (STEP is 0.6).
+- [x] Task 10 — reuse a scratch result object in `resolveShot`. `hitscan.js` mutates a
+  module-level `_result` in place as the nearest hit improves and returns it, instead of
+  allocating a fresh object literal per improvement. Documented that the returned object is
+  reused between calls; safe because `main.js:90` discards the return value and no other
+  caller stores it. No caller changed.
+
+**Verification (RUN A3):** `npm run check` 28/28; `npm run probe` exception-free with every
+P1-1..P1-7 behaviour block green — including the shotgun pellet counts (`shotPellets: 8`,
+`shotLanded: 4`) and the wall-blocks-bot cases that a mistake in `rayAABB`/`resolveShot`
+would break. **This run changes no visuals at all** — if anything looks different in a
+browser, that is a bug to report, not a look to adjust. Needs a human by eye: nothing
+visual is expected to change; confirm bots look identical, explosions look identical, and
+crouch-under-overhang behaviour is unchanged.
+
 ## PHASE2_STAGE_A — RUN A1 (2026-09-06) — PBR materials and renderer output
 
 - [x] Task 1 — PBR materials with procedural roughness maps. `textures.js` gained
