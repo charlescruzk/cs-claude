@@ -79,6 +79,13 @@ async function main() {
    await send('Runtime.enable');
    await send('Log.enable');
    await send('Page.enable');
+   // The ?cb param busts index.html's cache, but the module imports it pulls in
+   // (/src/...) are separate requests. Headless Chrome without a --user-data-dir
+   // can still serve those from a persistent HTTP cache, which shows up as a
+   // stale module (e.g. a settingsMenu.js without the render-scale controls).
+   // Disable the cache for the whole session so every module loads from disk.
+   await send('Network.enable');
+   await send('Network.setCacheDisabled', { cacheDisabled: true });
      // Headless Chrome has no real pointer, so requestPointerLock() throws
      // WrongDocumentError and input.locked never becomes true — the combat loop
      // (gated on it) would never run. Stub pointer lock so the click-to-lock path
@@ -609,6 +616,86 @@ async function main() {
      });
    console.log('\n=== BEHAVIOR (grenades) ===');
    console.log(gren && gren.result ? gren.result.value : '(grenades eval failed)');
+
+           // FIX_PROMPT_14 post stack: the composer exists on a normal load,
+           // OutputPass precedes SMAAPass (the ordering rule that locks in the
+           // display-referred SMAA), a simulated resize keeps the composer's
+           // targets matched to the renderer's drawing buffer, the render-scale
+           // setting doubles the pixel ratio, and Effects=Off bypasses the
+           // composer. The scale is normalized to 1.0 first so the assertions
+           // are deterministic whatever a previous run persisted.
+   const post = await send('Runtime.evaluate', {
+     expression: `(() => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const e = g.engine;
+        const sm = g.settingsMenu;
+        out.smCtor = sm ? sm.constructor.name : null;
+        out.smKeys = sm ? Object.keys(sm) : null;
+        if (!sm || !sm.scaleEl) return out;
+        sm.scaleEl.value = '1';
+        sm.scaleEl.dispatchEvent(new Event('change'));
+        out.composerActive = !!e.composer;
+        if (e.composer) {
+          const passes = e.composer.passes;
+          const outIdx = passes.findIndex((p) => p.constructor.name === 'OutputPass');
+          const smaaIdx = passes.findIndex((p) => p.constructor.name === 'SMAAPass');
+          out.passOrderCorrect = outIdx >= 0 && smaaIdx >= 0 && outIdx < smaaIdx;
+        } else {
+          out.passOrderCorrect = false;
+        }
+        e._onResize();
+        const c = e.composer && e.composer.composer;
+        out.resizeKeepsTargets = !!c && c.renderTarget1.width === e.renderer.domElement.width
+          && c.renderTarget1.height === e.renderer.domElement.height;
+        sm.scaleEl.value = '2';
+        sm.scaleEl.dispatchEvent(new Event('change'));
+        out.renderScaleApplies = e.renderer.getPixelRatio() === 2;
+        sm.scaleEl.value = '1';
+        sm.scaleEl.dispatchEvent(new Event('change'));
+        sm.fxEl.value = 'off';
+        sm.fxEl.dispatchEvent(new Event('change'));
+        out.effectsOffBypasses = e._postOn === false;
+        sm.fxEl.value = 'high';
+        sm.fxEl.dispatchEvent(new Event('change'));
+        out.effectsRestored = e._postOn === true;
+        return out;
+        })()`,
+     returnByValue: true,
+     });
+   console.log('\n=== BEHAVIOR (post stack) ===');
+   if (post && post.result && post.result.value !== undefined) {
+     console.log(post.result.value);
+   } else if (post && post.exceptionDetails) {
+     console.log('EXCEPTION: ' + (post.exceptionDetails.exception?.description
+       || post.exceptionDetails.text));
+   } else {
+     console.log('(post stack eval failed)', JSON.stringify(post));
+   }
+
+           // ?post=0: the escape hatch. Reload with the flag and confirm the
+           // composer is skipped and the direct render path still works. The
+           // pointer-lock stub was injected on new-document, so it survives this
+           // navigation; any exceptions the post=0 page throws are reported too.
+   const errCountBefore = errors.length;
+   await send('Page.navigate', { url: URL + '&post=0' });
+   await sleep(4500);
+   const post0 = await send('Runtime.evaluate', {
+     expression: `(() => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        let renderWorks = true;
+        try { g.engine._render(); } catch (err) { renderWorks = false; }
+        return { composerNull: g.engine.composer === null, renderWorks };
+        })()`,
+     returnByValue: true,
+     });
+   console.log('--- ?post=0 escape hatch ---');
+   console.log(post0 && post0.result ? post0.result.value : '(post=0 eval failed)');
+   const newErrors = errors.slice(errCountBefore);
+   if (newErrors.length) {
+     console.log('--- ?post=0 exceptions ---');
+     console.log(newErrors.join('\n'));
+     }
    ws.close();
 
    try { server.kill('SIGKILL'); } catch { /* already gone */ }

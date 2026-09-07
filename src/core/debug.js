@@ -133,10 +133,16 @@ export function makeDiagPanel(engine, input, round, controller) {
     if (samples.length > 30) samples.shift();
     const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
     const fps = avg > 0 ? Math.round(1 / avg) : 0;
+    // Frame time in ms is the number that matters — 16.7 vs 33 ms — where fps
+    // compresses the interesting range. The renderer's info reflects the last
+    // completed frame, which is exactly what a rolling readout wants.
+    const ms = avg * 1000;
+    const info = engine.renderer.info.render;
     const lockEl = document.pointerLockElement ? document.pointerLockElement.id : 'null';
     const p = controller.pos;
     el.textContent =
-             `fps=${fps} frames=${engine.frames} locked=${input.locked}\n` +
+             `fps=${fps} (${ms.toFixed(1)} ms) scale=${engine.renderer.getPixelRatio()}\n` +
+             `calls=${info.calls} tris=${info.triangles} frames=${engine.frames} locked=${input.locked}\n` +
              `lockEl=${lockEl} visibility=${document.visibilityState}\n` +
              `round=${round.state} t=${round.time.toFixed(1)} ` +
              `pos=(${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}) ` +
