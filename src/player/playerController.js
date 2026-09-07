@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { resolveCapsuleVsBoxes, aabbOverlap } from '../core/physics.js';
+import { resolveCapsuleVsBoxes, aabbOverlap, STEP } from '../core/physics.js';
 
 // Movement is tuned to feel like 1.6. Jump is 7.2 m/s (peak ~1.3 m under gravity 20):
 // high enough to clear a 1 m crate, short of a 2 m wall — that is the P0-4 target.
@@ -21,6 +21,10 @@ const STOP_SPEED = 1.0;    // m/s floor used in the friction drop calculation
 const GROUND_ACCEL = 12;   // ground acceleration coefficient
 const AIR_ACCEL = 12;      // air acceleration coefficient
 const AIR_WISH_CAP = 0.8;  // m/s — the cap that makes air-strafing work
+
+// Scratch box for the stand-height headroom test, reused every frame (the test
+// runs while the player is standing, ~120 times a second).
+const _standBox = { min: new THREE.Vector3(), max: new THREE.Vector3() };
 
 // The player owns a yaw Object3D (heading) with the camera as a child (pitch).
 // Position is the feet; the camera sits at eye height above the feet.
@@ -162,13 +166,11 @@ export class PlayerController {
      // feet (e.g. crouched under a low overhang) — stay crouched until you walk clear.
      // Colliders at or below step-over height are the surface we stand on, not headroom.
     if (!this.crouching) {
-      const standBox = {
-        min: new THREE.Vector3(this.pos.x - RADIUS, this.pos.y, this.pos.z - RADIUS),
-        max: new THREE.Vector3(this.pos.x + RADIUS, this.pos.y + STAND_H, this.pos.z + RADIUS),
-      };
+      _standBox.min.set(this.pos.x - RADIUS, this.pos.y, this.pos.z - RADIUS);
+      _standBox.max.set(this.pos.x + RADIUS, this.pos.y + STAND_H, this.pos.z + RADIUS);
       for (const c of this.colliders) {
-        if (c.max.y - this.pos.y <= 0.6) continue; // step-over height, not headroom
-        if (aabbOverlap(standBox, c)) { this.crouching = true; break; }
+        if (c.max.y - this.pos.y <= STEP) continue; // step-over height, not headroom
+        if (aabbOverlap(_standBox, c)) { this.crouching = true; break; }
       }
     }
 
