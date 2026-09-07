@@ -1,6 +1,11 @@
 import { events } from '../core/events.js';
 import { rayAABB } from '../core/physics.js';
 
+// Scratch result reused across calls — the returned object is mutated in place
+// as the nearest hit improves, so a caller must copy anything it wants to keep.
+// Safe because main.js discards the return value and no other caller stores it.
+const _result = { kind: 'wall', t: 0, target: null, headshot: false };
+
 // Resolve one shot against the map and any hittable targets. `targets` is an
 // array of { box, headBox, onHit(damage, headshot, weapon) }; `weapon` supplies the
 // base damage and is threaded to the target so its 'kill' event carries the weapon.
@@ -15,7 +20,9 @@ export function resolveShot(origin, dir, colliders, targets, weapon) {
      const t = rayAABB(origin, dir, c.min, c.max);
      if (t !== null && t < nearestT) {
        nearestT = t;
-       result = { kind: 'wall', t };
+       _result.kind = 'wall';
+       _result.t = t;
+       result = _result;
       }
      }
 
@@ -34,7 +41,11 @@ export function resolveShot(origin, dir, colliders, targets, weapon) {
        }
      if (tt !== null && tt < nearestT) {
        nearestT = tt;
-       result = { kind: 'target', t: tt, target, headshot };
+       _result.kind = 'target';
+       _result.t = tt;
+       _result.target = target;
+       _result.headshot = headshot;
+       result = _result;
        }
      }
 
