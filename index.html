@@ -9,10 +9,26 @@
                  font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #fff; }
     #game-canvas { display: block; width: 100vw; height: 100vh; }
     #hud { position: fixed; inset: 0; pointer-events: none; }
-    #lock-overlay { position: fixed; inset: 0; display: flex; align-items: center;
-                    justify-content: center; background: rgba(0,0,0,.6);
-                    font-size: 28px; letter-spacing: .05em; cursor: pointer; }
+    #lock-overlay { position: fixed; inset: 0; display: flex; flex-direction: column;
+                    align-items: center; justify-content: center; gap: 18px;
+                    padding-bottom: 12vh; cursor: pointer; text-align: center;
+                    background: radial-gradient(ellipse at center, rgba(8,10,14,.72) 0%, rgba(4,5,8,.92) 100%); }
     #lock-overlay.hidden { display: none; }
+    #title .game-name { font: 700 64px/1 monospace; letter-spacing: .18em; color: #e8e6e0;
+                        text-shadow: 0 0 24px rgba(255,200,120,.25); }
+    #title .game-name span { color: #ff9a3c; }
+    #title .tag { margin-top: 10px; font: 13px/1.5 monospace; letter-spacing: .08em;
+                  color: #8f8d86; text-transform: uppercase; }
+    #play-btn { margin-top: 28px; font: 700 20px/1 monospace; letter-spacing: .2em;
+                padding: 14px 44px; color: #0b0c0f; background: #ff9a3c; border: 0;
+                cursor: pointer; box-shadow: 0 0 0 2px #0b0c0f, 0 0 0 4px #ff9a3c;
+                transition: transform .08s ease, background .12s ease; }
+    #play-btn:hover { background: #ffb266; transform: translateY(-1px); }
+    #lock-overlay.paused #title .tag { display: none; }
+    #title .ctl { margin-top: 26px; max-width: 720px; font: 12px/1.9 monospace;
+                  color: #a8a59c; letter-spacing: .04em; }
+    #title .ctl b { color: #e8e6e0; }
+    #title .hint { margin-top: 6px; font: 11px/1.4 monospace; color: #6c6a64; letter-spacing: .1em; }
     #boot-status { position: fixed; left: 12px; top: 12px; font: 12px/1.4 monospace;
                    color: #9f9; opacity: .8; }
     /* --- HUD (P0-7) --- */
@@ -147,7 +163,19 @@
          <span class="res">/ <span id="reserve">100</span></span></div>
    </div>
 </div>
-  <div id="lock-overlay">Click to play</div>
+  <div id="lock-overlay">
+    <div id="title">
+      <div class="game-name">CS<span>BROWSER</span></div>
+      <div class="tag">Counter-Strike 1.6 tribute &middot; zero assets &middot; all procedural</div>
+      <button id="play-btn" type="button">&#9654; PLAY</button>
+      <div class="ctl">
+        <b>WASD</b> move &middot; <b>Shift</b> walk &middot; <b>Ctrl</b> crouch &middot; <b>Space</b> jump<br>
+        <b>Mouse</b> aim / fire &middot; <b>RMB</b> scope &middot; <b>1&ndash;4</b> weapons &middot; <b>R</b> reload<br>
+        <b>B</b> buy (freeze phase) &middot; <b>G</b> frag &middot; <b>H</b> flash &middot; <b>Tab</b> scoreboard
+      </div>
+      <div class="hint">ESC PAUSES &middot; CLICK ANYWHERE TO RESUME</div>
+    </div>
+  </div>
     <div id="scope-overlay"></div>
        <div id="whiteout"></div>
        <div id="impact-flash"></div>

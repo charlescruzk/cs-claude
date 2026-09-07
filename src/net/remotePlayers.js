@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildHumanoid, applyTeam } from '../geo/humanoid.js';
 import { INTERP_DELAY_MS, MAX_SNAPSHOTS, FLAG, lerpAngle, unpackState } from './protocol.js';
 
 // Other humans in the room: their meshes, their snapshot interpolation, and the
@@ -16,27 +17,10 @@ const HEAD = 0.4;
 const CROUCH_HEIGHT = 1.2; // playerController CROUCH_H
 const TEAM_COLOR = { ct: 0x3355cc, t: 0xcc6633 };
 
-// Shared geometry and materials — one set for every remote player, mirroring
-// bot.js. Never disposed; they outlive any single peer.
-const BODY_GEOMETRY = new THREE.BoxGeometry(BODY, HEIGHT, BODY);
-const HEAD_GEOMETRY = new THREE.BoxGeometry(HEAD, HEAD, HEAD);
-const NOSE_GEOMETRY = new THREE.BoxGeometry(0.12, 0.12, 0.25);
-const NOSE_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.65, metalness: 0.0 });
-const _materials = new Map();
-
 // One NaN off the wire would poison a position for the rest of the session:
 // every later lerp against it is NaN and the mesh vanishes.
 function fin(v) {
   return Number.isFinite(v) ? v : 0;
-}
-
-function getMaterial(color) {
-  let mat = _materials.get(color);
-  if (!mat) {
-    mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.0 });
-    _materials.set(color, mat);
-  }
-  return mat;
 }
 
 // One peer: a snapshot buffer stamped with LOCAL receive time, the interpolated
@@ -67,23 +51,9 @@ export class RemotePlayer {
 
   // Body + head in team colour with a dark nose for facing — same as a bot.
   _build(scene) {
-    this.root = new THREE.Group();
-    const mat = getMaterial(TEAM_COLOR[this.team] || 0x888888);
-    this.body = new THREE.Mesh(BODY_GEOMETRY, mat);
-    this.body.position.y = 0.9;
-    this.body.castShadow = true;
-    this.body.receiveShadow = true;
-    this.root.add(this.body);
-    this.head = new THREE.Mesh(HEAD_GEOMETRY, mat);
-    this.head.position.y = 2.0;
-    this.head.castShadow = true;
-    this.head.receiveShadow = true;
-    this.root.add(this.head);
-    this.nose = new THREE.Mesh(NOSE_GEOMETRY, NOSE_MATERIAL);
-    this.nose.position.set(0, 1.3, -0.5);
-    this.nose.castShadow = true;
-    this.nose.receiveShadow = true;
-    this.root.add(this.nose);
+    const { root, parts } = buildHumanoid(TEAM_COLOR[this.team] || 0x888888);
+    this.root = root;
+    this.parts = parts;
     scene.add(this.root);
   }
 
@@ -93,9 +63,7 @@ export class RemotePlayer {
     const next = team === 't' ? 't' : 'ct';
     if (next === this.team) return;
     this.team = next;
-    const mat = getMaterial(TEAM_COLOR[next]);
-    this.body.material = mat;
-    this.head.material = mat;
+    applyTeam(this.parts, TEAM_COLOR[next]);
   }
 
   // Stamp with the LOCAL clock. Peer clocks are not synchronised and nothing in
@@ -169,8 +137,7 @@ export class RemotePlayer {
     // Match the local player's capsule: crouching drops 1.8 m to 1.2 m. Without this
     // a crouching peer's head box floats 0.6 m above their actual head.
     const h = this.crouching ? CROUCH_HEIGHT : HEIGHT;
-    this.body.position.y = h / 2;
-    this.head.position.y = h + HEAD / 2;
+    this.root.scale.y = h / HEIGHT; // crouch squashes the figure to the hit-box height
     this.box.min.set(this.pos.x - BODY / 2, base, this.pos.z - BODY / 2);
     this.box.max.set(this.pos.x + BODY / 2, base + h, this.pos.z + BODY / 2);
     this.headBox.min.set(this.pos.x - HEAD / 2, base + h, this.pos.z - HEAD / 2);

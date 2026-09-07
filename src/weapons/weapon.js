@@ -69,6 +69,7 @@ export class Weapon {
       }
     if (idx >= 0 && idx !== this.index) {
       this.index = idx;
+      events.emit('switch', { key: WEAPON_KEYS[idx] });
       this.switching = true;
       this.switchTimer = DRAW_TIME;
       this.reloading = false;
@@ -87,6 +88,7 @@ export class Weapon {
     const auto = a.mag === 0 && input.mouseDown[0];
     if (input.justPressed('KeyR') || auto) {
       this.reloading = true;
+    events.emit('reload', {});
       this.reloadTimer = d.reloadTime;
     }
   }

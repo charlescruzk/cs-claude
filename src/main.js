@@ -23,6 +23,8 @@ import { ProjectileManager } from './game/projectile.js';
 import { Tactical } from './weapons/tactical.js';
 import { Effects } from './game/effects.js';
 import { spawnFor } from './game/teams.js';
+import { Audio } from './audio/audio.js';
+import { Sfx } from './audio/sfx.js';
 import { NetClient } from './net/netClient.js';
 import { RemotePlayers } from './net/remotePlayers.js';
 import { packFlags } from './net/protocol.js';
@@ -40,7 +42,12 @@ const input = new Input(canvas);
 // Surface an update-loop failure on screen instead of a silent frozen frame.
 engine.onError = (err) => { status.textContent = 'UPDATE ERROR: ' + err.message; status.style.color = '#ff6b6b'; };
 
-overlay.addEventListener('click', () => input.requestLock());
+// Audio must be unlocked from inside a real user gesture; the click that starts
+// the game is the one gesture we are guaranteed to get.
+const audio = new Audio();
+const sfx = new Sfx(audio);
+const playBtn = document.getElementById('play-btn');
+overlay.addEventListener('click', () => { audio.unlock(); input.requestLock(); });
 // A refused pointer lock must not die silently: the whole game is gated on it, so
 // report the failure on screen the way index.html reports a boot error.
 input._onLockError = (msg) => {
@@ -198,6 +205,8 @@ const buyMenu = new BuyMenu(player, weapon, round, input);
 // the overlay must not re-arm on top of it. It re-arms when the menu closes.
 input._onLockChange = (locked) => {
   overlay.classList.toggle('hidden', locked || buyMenu._shown);
+  // Once the game has been entered, the title screen becomes the pause screen.
+  if (locked && playBtn) { playBtn.textContent = '\u25B6 RESUME'; overlay.classList.add('paused'); }
 };
 
 // Thrown tacticals: G/H spawn an arcing frag or flash into the ProjectileManager,
@@ -219,7 +228,7 @@ const diagPanel = diagEnabled() ? makeDiagPanel(engine, input, round, controller
 
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
-  hud, round, scoreboard, buyMenu, projectiles, tactical, effects,
+  hud, round, scoreboard, buyMenu, projectiles, tactical, effects, audio, sfx,
   net, remotePlayers, netMenu,
   three: THREE.REVISION,
 };
@@ -237,6 +246,7 @@ engine.start((dt) => {
     engine.camera.updateProjectionMatrix();
     controller.moveScale = weapon.scoped ? 0.5 : 1;
     if (round.state === 'live') botManager.update(dt, controller, map.colliders);
+    botManager.updateDead(dt, map.colliders); // ragdolls settle regardless of state
         // Thrown tacticals: read G/H then integrate any in-flight nade.
     tactical.update(dt, input, engine.camera);
     projectiles.update(dt, map.colliders);

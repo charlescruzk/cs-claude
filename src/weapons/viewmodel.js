@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { events } from '../core/events.js';
+import { getGun } from '../geo/gun.js';
 
 // A first-person gun: two boxes parented to the camera at the lower right, with a
 // muzzle flash and a recoil kick. On every 'shot' it kicks the gun back/up, shows
@@ -7,15 +8,6 @@ import { events } from '../core/events.js';
 // then recovers (half-life 0.2 s) by easing controller.recoil back to zero.
 const FLASH_TIME = 0.04;
 const RECOVER = 0.2;
-
-// Per-weapon silhouette: how the body/barrel scale and tint from the rifle
-// baseline so the pistol/rifle/shotgun/sniper read differently in first person.
-const SHAPES = {
-  Pistol:   { bodyZ: 0.6,  barrelZ: 0.3,  color: 0x3a3a42 },
-  Rifle:    { bodyZ: 1.0,  barrelZ: 1.0,  color: 0x222228 },
-  Shotgun:  { bodyZ: 0.9,  barrelZ: 0.8,  color: 0x2a2a30 },
-  Sniper:   { bodyZ: 0.92, barrelZ: 1.8, color: 0x1c1c22 },
-};
 
 export class Viewmodel {
   constructor(camera, controller, weapon) {
@@ -30,36 +22,32 @@ export class Viewmodel {
     events.on('shot', this._onShot.bind(this));
    }
 
-   // Two dark boxes read as a gun; the flash is a small emissive sphere at the
-   // muzzle, hidden until a shot. The whole rig sits low and to the right.
+   // The gun rig sits low and to the right of the camera. The model itself comes
+   // from geo/gun.js per weapon and is swapped on change; the flash is a small
+   // emissive sphere parked at that model's muzzle.
   _build(camera) {
     this.gun = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.40, metalness: 0.60 });
-    this.body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.5), mat);
-    this.body.position.set(0, 0, -0.25);
-    this.barrel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.34), mat);
-    this.barrel.position.set(0, 0.03, -0.55);
-    this.gun.add(this.body, this.barrel);
+    this.model = null;
     this.gun.position.set(0.32, -0.28, -0.55);
     this.gunBase = this.gun.position.clone();
 
     this.flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.09, 8, 8),
+      new THREE.SphereGeometry(0.06, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xffcc55 })
      );
-    this.flash.position.set(0, 0.03, -0.75);
     this.flash.visible = false;
     this.gun.add(this.flash);
 
      camera.add(this.gun);
    }
 
-   // Rescale the gun to the equipped weapon; the rifle geometry is the baseline.
+   // Swap in the equipped weapon's cached model and park the flash at its muzzle.
   _reshape(def) {
-    const s = SHAPES[def.name] || SHAPES.Rifle;
-    this.body.scale.z = s.bodyZ;
-    this.barrel.scale.z = s.barrelZ;
-    this.body.material.color.setHex(s.color);
+    const { group, muzzleZ } = getGun(String(def.name || 'rifle').toLowerCase());
+    if (this.model) this.gun.remove(this.model);
+    this.model = group;
+    this.gun.add(group);
+    this.flash.position.set(0, 0.015, muzzleZ - 0.03);
     this._shapeDef = def;
    }
 

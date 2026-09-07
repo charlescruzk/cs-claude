@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { resolveCapsuleVsBoxes, aabbOverlap, STEP } from '../core/physics.js';
+import { events } from '../core/events.js';
 
 // Movement is tuned to feel like 1.6. Jump is 7.2 m/s (peak ~1.3 m under gravity 20):
 // high enough to clear a 1 m crate, short of a 2 m wall — that is the P0-4 target.
@@ -45,6 +46,8 @@ export class PlayerController {
     this.frozen = false; // set by the round loop during freeze
     this.disabled = false; // set when the player dies
     this.moveScale = 1; // 0.5 while scoped, 1 otherwise (set by main.js)
+    this._stepDist = 0;   // distance since the last footstep
+    this._wasGrounded = true;
 
     this.yawObject = new THREE.Object3D();
     this.yawObject.add(this.camera);
@@ -74,10 +77,32 @@ export class PlayerController {
         } else {
         this.horizontal(dt);
         }
+      const vyBefore = this.vel.y;
       this.vertical(dt);
+      this._footsteps(dt, vyBefore);
      }
 
     this.syncCamera();
+    }
+
+    // Footsteps are driven by distance, not time, so walking steps come slower
+    // than running ones for free. Crouching is silent — a real CS affordance.
+  _footsteps(dt, vyBefore) {
+    if (!this._wasGrounded && this.grounded && vyBefore < -3) {
+      events.emit('land', { speed: -vyBefore });
+      this._stepDist = 0;
+     }
+    this._wasGrounded = this.grounded;
+    if (!this.grounded || this.crouching) { this._stepDist = 0; return; }
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    if (speed < 0.5) { this._stepDist = 0; return; }
+    const keys = this.input.keys;
+    const walk = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    this._stepDist += speed * dt;
+    if (this._stepDist >= (walk ? 2.8 : 2.0)) {
+      this._stepDist = 0;
+      events.emit('step', { walk });
+     }
     }
 
     // Yaw on the parent, pitch on the camera, pitch clamped to ±89°.

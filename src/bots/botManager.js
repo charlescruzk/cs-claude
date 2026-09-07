@@ -27,6 +27,12 @@ export class BotManager {
     for (const bot of this.bots) bot.update(dt, player, colliders);
   }
 
+  // Ragdolls run whatever the round state, so a body keeps falling after the
+  // round-end freeze rather than hanging mid-air.
+  updateDead(dt, colliders) {
+    for (const bot of this.bots) bot.updateDead(dt, colliders);
+  }
+
   aliveCount() {
     let n = 0;
     for (const bot of this.bots) if (!bot.dead) n++;
