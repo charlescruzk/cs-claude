@@ -3,6 +3,48 @@
 Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked after two
 attempts (write what you tried). Add a one-line note per task.
 
+## FIX_PROMPT_8 — RUN 1 (2026-09-06) — field of view, walk feel, and a real level
+
+- [x] Task 1 — FOV is now horizontal-correct. Three.js `PerspectiveCamera` takes a VERTICAL
+  fov; CS quotes 90 as HORIZONTAL, so the game was rendering ~121° horizontal. `src/core/engine.js`
+  adds `vFovFor(hFovDeg, aspect)` and `BASE_HFOV = 90` / `SCOPED_HFOV = 40`; the constructor and
+  `_onResize` both compute `camera.fov = vFovFor(BASE_HFOV, aspect)` (resize no longer silently
+  widens the view), and `src/main.js` scoped-aim ease uses `vFovFor(weapon.scoped ? SCOPED_HFOV :
+  BASE_HFOV, aspect)`. Committed `6a43733`.
+- [x] Task 2 — new level in `src/map/mapData.js`, **75 boxes**. Three lanes (west x≈−20, mid
+  x∈[−5,5], east x≈+20) split by a 3 m catwalk at z=0; Site A is a 2 m platform in the north-east,
+  Site B a ground bay in the south-west. Four staircases, all solid blocks from the ground up
+  (0.25 m risers / 0.9 m treads, never floating slabs), base coordinates: Site A from mid at
+  `(4.8, −14)` (8 steps, climbs east to y=2), Site A from the east lane at `(23, −0.8)` (8 steps,
+  climbs north to y=2), catwalk west at `(−21, −10.8)` (12 steps, climbs north to y=3), catwalk
+  east at `(21, 9.9)` (12 steps, climbs south to y=3). I walked the stair arithmetic by hand for
+  all four: every top lands within 0.45 m of its platform/catwalk face (≤ the 0.6 m STEP), so
+  every platform is reachable. Committed `89c1424`.
+- [x] Task 3 — walk feel. RUN/WALK/CROUCH/JUMP untouched (they match CS 1.6). The glide was the
+  perfectly rigid camera: `FRICTION` 5.5→6.5 (the only constant changed), plus a head bob that is
+  a camera-local offset only — it never touches `this.pos`, `this.eye`, or the shot origin. The
+  bob reuses the `_stepDist` phase (so it stays in step with footsteps), eases in/out with speed,
+  and adds a landing dip scaled by impact velocity. **Shot-origin decoupling:** the bob would have
+  shifted `camera.getWorldPosition()` by up to ~0.04 m, so `Weapon` and `Tactical` now take the
+  controller and compute the shot/throw origin from `controller.pos + eye` (exactly the pre-bob
+  behavior), falling back to the camera when no controller is present. Committed `d430149`.
+- [x] Task 4 — bots on stairs. `src/bots/bot.js` gains a `_vertical(dt, colliders)` mirroring
+  `playerController.vertical()` (gravity, integrate `pos.y`, `resolveCapsuleVsBoxes`, floor clamp
+  below y=0) and `_syncMesh` is height-aware, so a bot standing on the platform/catwalk renders
+  at the right height. `src/bots/botData.js` waypoints now include the Site A platform `[18,−14]`
+  and the catwalk `[−15,0]`/`[15,0]`. One waypoint fix by me: `[0,0]` was inside the catwalk solid
+  block (x∈[−20,20], z∈[−1,1]) — a bot beelining there would be pushed out and stuck forever — so
+  it became `[0,−2]` (just north of the catwalk, still mid). Committed `dc7ced2`.
+- [x] End-of-run verification — `npm run check` 40/40; `npm run probe` exit 0, `(no code errors)`,
+  post-click state `{hasGame:true, roundState:"freeze", botCount:4}`, and every P1-1..P1-7
+  behavior block green (sniperKilled, shotKilled, sniperScoped, kevlarHalved, opensInFreeze,
+  threwFrag, fragDamaged, buyHintFreeze all true). Bots were seen standing at height in the probe
+  (bot meshes at platform/catwalk y). **FOV, bob amplitude, and level readability need a human to
+  confirm by eye** — the probe proves the code paths run, not that the game *feels* right.
+- Known limitation (pre-existing, more likely with elevated waypoints): the 2D-waypoint beeline
+  model means a bot only climbs stairs when its approach angle hits a staircase; a bot beelining
+  an elevated waypoint from a bad angle can slide along the platform/catwalk face indefinitely.
+
 ## FIX_PROMPT_6 — RUN 1 (2026-09-06) — make single-player playable again
 
 - [x] Task 1 — collapse the multiplayer lobby into the bottom-right corner, closed by
