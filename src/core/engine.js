@@ -9,6 +9,9 @@ export class Engine {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8fb8de); // pale sky
@@ -22,9 +25,9 @@ export class Engine {
     this.clock = new THREE.Clock();
 
     // Soft ambient fill from the hemisphere + a directional "sun".
-    this.hemisphere = new THREE.HemisphereLight(0xffffff, 0x445566, 1.0);
+    this.hemisphere = new THREE.HemisphereLight(0xbcd3f0, 0x4a4036, 0.45);
     this.scene.add(this.hemisphere);
-    this.sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    this.sun = new THREE.DirectionalLight(0xfff2e0, 3.2);
     this.sun.position.set(60, 90, 40);
     this.scene.add(this.sun);
 
