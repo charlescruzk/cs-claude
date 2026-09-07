@@ -161,7 +161,7 @@ net.onStatus = (text, kind) => {
 // Settings: a pause-screen panel (bottom-left) for sensitivity, weapon bob, volume
 // and invert-Y. It applies live and persists; it never runs while the pointer is
 // locked, so it has no per-frame cost.
-const settingsMenu = new SettingsMenu({ controller, viewmodel, audio });
+const settingsMenu = new SettingsMenu({ controller, viewmodel, audio, engine });
 
 // Bots plus peers in one array for resolveShot. Rebuilt once per shot, never per
 // pellet (a shotgun pull is 8), and skipped entirely while offline so the

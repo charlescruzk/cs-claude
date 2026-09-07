@@ -21,6 +21,8 @@ const DEFAULTS = {
   bob: 1.0,
   volume: 0.6,
   invertY: false,
+  scale: 1.0,   // render scale: 2.0 is four times the pixels of 1.0
+  fx: 'high',    // effects: off = bypass composer, low = SMAA only, high = full stack
 };
 
 // z-index 7, same as #net-menu. #lock-overlay sets no z-index/transform/opacity so it
@@ -42,16 +44,19 @@ const CSS = `
 #settings-menu .sm-lbl { width: 88px; font-size: 11px; letter-spacing: .08em;
                          text-transform: uppercase; opacity: .7; }
 #settings-menu input[type=range] { flex: 1; min-width: 0; }
+#settings-menu select { flex: 1; min-width: 0; background: rgba(0,0,0,.55); color: #e8e6e0;
+                        border: 1px solid #333; font: 11px/1 monospace; padding: 3px 4px; }
 #settings-menu .sm-val { width: 44px; text-align: right; font: 11px/1 monospace; opacity: .85; }
 #settings-menu .sm-chk { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 #settings-menu .sm-chk input { margin: 0; }
 `;
 
 export class SettingsMenu {
-  constructor({ controller = null, viewmodel = null, audio = null } = {}) {
+  constructor({ controller = null, viewmodel = null, audio = null, engine = null } = {}) {
     this.controller = controller;
     this.viewmodel = viewmodel;
     this.audio = audio;
+    this.engine = engine;
     this._injectStyle();
     this._build();
   }
@@ -85,6 +90,19 @@ export class SettingsMenu {
           <span class="sm-val" id="sm-vol-val">60%</span></div>
         <div class="sm-chk"><span class="sm-lbl">Invert Y</span>
           <input id="sm-inv" type="checkbox"></div>
+        <div class="sm-row"><span class="sm-lbl">Render scale</span>
+          <select id="sm-scale">
+            <option value="0.75">0.75</option>
+            <option value="1">1.0</option>
+            <option value="1.5">1.5</option>
+            <option value="2">2.0</option>
+          </select></div>
+        <div class="sm-row"><span class="sm-lbl">Effects</span>
+          <select id="sm-fx">
+            <option value="off">Off</option>
+            <option value="low">Low</option>
+            <option value="high">High</option>
+          </select></div>
       </div>`;
     host.appendChild(root);
 
@@ -96,6 +114,8 @@ export class SettingsMenu {
     this.volEl = root.querySelector('#sm-vol');
     this.volVal = root.querySelector('#sm-vol-val');
     this.invEl = root.querySelector('#sm-inv');
+    this.scaleEl = root.querySelector('#sm-scale');
+    this.fxEl = root.querySelector('#sm-fx');
     this.toggleEl = root.querySelector('#sm-toggle');
 
     this._trapEvents(root);
@@ -114,6 +134,8 @@ export class SettingsMenu {
     this.bobEl.addEventListener('input', () => this._apply());
     this.volEl.addEventListener('input', () => this._apply());
     this.invEl.addEventListener('change', () => this._apply());
+    this.scaleEl.addEventListener('change', () => this._apply());
+    this.fxEl.addEventListener('change', () => this._apply());
 
     // Load persisted values (validated in _load), then apply them to the live
     // objects so a reload keeps the feel without the player touching anything.
@@ -121,6 +143,8 @@ export class SettingsMenu {
     this.bobEl.value = saved.bob;
     this.volEl.value = saved.volume;
     this.invEl.checked = saved.invertY;
+    this.scaleEl.value = saved.scale;
+    this.fxEl.value = saved.fx;
     this._apply();
   }
 
@@ -143,6 +167,8 @@ export class SettingsMenu {
     const bob = Number(this.bobEl.value);
     const volume = Number(this.volEl.value);
     const invertY = this.invEl.checked;
+    const scale = Number(this.scaleEl.value);
+    const fx = this.fxEl.value;
 
     if (this.controller) {
       this.controller.sens = sens;
@@ -151,11 +177,29 @@ export class SettingsMenu {
     if (this.viewmodel) this.viewmodel.bobScale = bob; // 0 fully disables the bob
     if (this.audio) this.audio.setVolume(volume);
 
+    if (this.engine) {
+      // Render scale moves BOTH the renderer and the composer — one without the
+      // other leaves the composer's targets at the old ratio and the image
+      // stretches. `?post=0` leaves composer null; the renderer still scales.
+      this.engine.renderer.setPixelRatio(scale);
+      if (this.engine.composer) {
+        this.engine.composer.setPixelRatio(scale);
+        this.engine.composer.setSize(window.innerWidth, window.innerHeight);
+      }
+      // Effects: Off bypasses the composer entirely; Low keeps SMAA + tone
+      // mapping but drops the expensive passes; High is the full stack.
+      this.engine._postOn = fx !== 'off';
+      if (this.engine.composer) {
+        this.engine.composer.gtao.enabled = fx === 'high';
+        this.engine.composer.bloom.enabled = fx === 'high';
+      }
+    }
+
     this.sensVal.textContent = (sens / 0.0025).toFixed(1) + 'x';
     this.bobVal.textContent = bob.toFixed(1);
     this.volVal.textContent = Math.round(volume * 100) + '%';
 
-    this._save({ sens, bob, volume, invertY });
+    this._save({ sens, bob, volume, invertY, scale, fx });
   }
 
   // localStorage can throw on ACCESS (private mode, disabled storage); a remembered
@@ -169,6 +213,8 @@ export class SettingsMenu {
         bob: this._num(raw.bob, DEFAULTS.bob, 0, 2.0),
         volume: this._num(raw.volume, DEFAULTS.volume, 0, 1),
         invertY: raw.invertY === true,
+        scale: this._num(raw.scale, DEFAULTS.scale, 0.75, 2.0),
+        fx: ['off', 'low', 'high'].includes(raw.fx) ? raw.fx : DEFAULTS.fx,
       };
     } catch (err) {
       return { ...DEFAULTS };
