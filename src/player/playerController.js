@@ -17,11 +17,19 @@ const STAND_EYE = 1.6;
 const CROUCH_EYE = 1.0;
 const SENS = 0.0025;
 const PITCH_LIMIT = 89 * Math.PI / 180;
-const FRICTION = 5.5;      // ground friction coefficient, per second
+const FRICTION = 6.5;      // ground friction coefficient, per second
 const STOP_SPEED = 1.0;    // m/s floor used in the friction drop calculation
 const GROUND_ACCEL = 12;   // ground acceleration coefficient
 const AIR_ACCEL = 12;      // air acceleration coefficient
 const AIR_WISH_CAP = 0.8;  // m/s — the cap that makes air-strafing work
+
+// Head bob and landing dip are camera-local offsets only — they never touch
+// this.pos, this.eye, or the shot origin.
+const BOB_VERT = 0.035;     // m — vertical bob amplitude at run speed
+const BOB_SWAY = 0.022;     // m — horizontal sway amplitude
+const BOB_EASE = 0.15;      // s — time constant for the bob fading in/out
+const LAND_DIP_MAX = 0.09;  // m — deepest landing dip, at a full-speed fall
+const LAND_DIP_HALF = 0.18; // s — half-life of the landing dip recovery
 
 // Scratch box for the stand-height headroom test, reused every frame (the test
 // runs while the player is standing, ~120 times a second).
@@ -48,6 +56,8 @@ export class PlayerController {
     this.moveScale = 1; // 0.5 while scoped, 1 otherwise (set by main.js)
     this._stepDist = 0;   // distance since the last footstep
     this._wasGrounded = true;
+    this._bobAmp = 0;     // 0..1 — head-bob amplitude, eased toward 0 when still
+    this._landDip = 0;    // m — current landing dip depth, recovers on a half-life
 
     this.yawObject = new THREE.Object3D();
     this.yawObject.add(this.camera);
@@ -63,6 +73,8 @@ export class PlayerController {
     this.crouching = false;
     this.height = STAND_H;
     this.eye = STAND_EYE;
+    this._bobAmp = 0;
+    this._landDip = 0;
     }
 
   update(dt, input, colliders) {
@@ -82,6 +94,13 @@ export class PlayerController {
       this._footsteps(dt, vyBefore);
      }
 
+    // Landing dip recovers on a half-life; bob amplitude eases toward 0 when
+    // the player is still, crouching, airborne, or dead.
+    this._landDip *= Math.exp(-dt * Math.LN2 / LAND_DIP_HALF);
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    const bobTarget = !this.disabled && this.grounded && !this.crouching && speed >= 0.5 ? 1 : 0;
+    this._bobAmp += (bobTarget - this._bobAmp) * (1 - Math.exp(-dt / BOB_EASE));
+
     this.syncCamera();
     }
 
@@ -91,6 +110,7 @@ export class PlayerController {
     if (!this._wasGrounded && this.grounded && vyBefore < -3) {
       events.emit('land', { speed: -vyBefore });
       this._stepDist = 0;
+      this._landDip = Math.min(LAND_DIP_MAX, LAND_DIP_MAX * (-vyBefore) / JUMP);
      }
     this._wasGrounded = this.grounded;
     if (!this.grounded || this.crouching) { this._stepDist = 0; return; }
@@ -211,5 +231,29 @@ export class PlayerController {
     this.yawObject.rotation.y = this.yaw;
     this.camera.position.set(0, this.eye, 0);
     this.camera.rotation.x = this.pitch + this.recoil;
+
+    // Head bob and landing dip are camera-local offsets on top of the eye, so
+    // they never touch this.pos, this.eye, or the shot origin.
+    const bob = this._bobOffset();
+    this.camera.position.x += bob.x;
+    this.camera.position.y += bob.y - this._landDip;
+    }
+
+    // Head bob: a camera-local offset driven by the same distance phase as the
+    // footsteps, so the view and the step sounds stay in step. The amplitude
+    // scales with speed (walking bobs less than running) and eases out when
+    // the player stops or leaves the ground.
+  _bobOffset() {
+    if (this._bobAmp === 0) return { x: 0, y: 0 };
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    const keys = this.input.keys;
+    const walk = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    const stepLen = walk ? 2.8 : 2.0;
+    const phase = (this._stepDist / stepLen) * Math.PI * 2;
+    const amp = this._bobAmp * (speed / RUN);
+    return {
+      x: Math.sin(phase) * BOB_SWAY * amp,
+      y: Math.sin(phase * 2) * BOB_VERT * amp,
+    };
     }
 }

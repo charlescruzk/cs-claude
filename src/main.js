@@ -79,7 +79,7 @@ const botManager = new BotManager(engine.scene, map.spawns);
 
 // Weapons: keys 1-4 switch the pistol/rifle/shotgun/sniper. One 'shot' per pull
 // fans out one perturbed hitscan per pellet, resolved against the map + bots.
-const weapon = new Weapon('pistol');
+const weapon = new Weapon('pistol', controller);
 const viewmodel = new Viewmodel(engine.camera, controller, weapon);
 
 // --- Multiplayer (opt-in) ----------------------------------------------------
@@ -223,7 +223,7 @@ input._onLockChange = (locked) => {
 // Thrown tacticals: G/H spawn an arcing frag or flash into the ProjectileManager,
 // which integrates and detonates them. The effects themselves land in P1-6.
 const projectiles = new ProjectileManager(engine.scene);
-const tactical = new Tactical(projectiles, engine.camera);
+const tactical = new Tactical(projectiles, engine.camera, controller);
 // Effects react to a 'tactical' detonation: frag blast damage + explosion + orange
 // flash, and a flash white-out when the player has line of sight to the impact.
 const effects = new Effects({

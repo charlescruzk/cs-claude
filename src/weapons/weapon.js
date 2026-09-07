@@ -18,7 +18,8 @@ const _tmp = new THREE.Vector3();
 // pull carrying the origin, a spread-perturbed direction per pellet, and the
 // current weapon def (main.js fans the pellets out into hitscans).
 export class Weapon {
-  constructor(startKey = 'pistol') {
+  constructor(startKey = 'pistol', controller = null) {
+    this.controller = controller; // shot origin = eye, decoupled from the head bob
     this.defs = WEAPON_KEYS.map((k) => weaponData[k]);
     this.index = Math.max(0, WEAPON_KEYS.indexOf(startKey));
     this.ammo = this.defs.map((d) => ({ mag: d.mag, reserve: d.reserve }));
@@ -146,7 +147,13 @@ export class Weapon {
 
       // Direction is the camera forward nudged by a small random amount, then
       // renormalized — a cheap cone of half-angle ≈ current spread.
-    camera.getWorldPosition(_origin);
+    // The shot origin is the eye, not the camera: the head bob is a camera-local
+    // offset and must never move where bullets come from.
+    if (this.controller) {
+      _origin.set(this.controller.pos.x, this.controller.pos.y + this.controller.eye, this.controller.pos.z);
+    } else {
+      camera.getWorldPosition(_origin);
+    }
     camera.getWorldDirection(_dir);
     const s = this.spread;
      _perturb

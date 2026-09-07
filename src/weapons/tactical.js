@@ -20,9 +20,10 @@ const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
 export class Tactical {
-  constructor(projectiles, camera) {
+  constructor(projectiles, camera, controller = null) {
     this.projectiles = projectiles;
     this.camera = camera;
+    this.controller = controller; // throw origin = eye, decoupled from the head bob
     this._frag = null;    // the in-flight frag, or null
     this._flash = null;   // the in-flight flash, or null
    }
@@ -47,7 +48,13 @@ export class Tactical {
     const nade = NADES[kind];
     const slot = this[kind === 'frag' ? '_frag' : '_flash'];
     if (slot && slot.alive) return;
-    this.camera.getWorldPosition(_origin);
+    // The throw origin is the eye, not the camera: the head bob is a camera-local
+    // offset and must never move where nades come from.
+    if (this.controller) {
+      _origin.set(this.controller.pos.x, this.controller.pos.y + this.controller.eye, this.controller.pos.z);
+    } else {
+      this.camera.getWorldPosition(_origin);
+    }
     this.camera.getWorldDirection(_dir);
      // Forward from the eye with an upward arc, offset a meter forward so the nade
     // does not spawn inside the viewmodel.
