@@ -7,7 +7,16 @@ export class Engine {
   constructor(canvas) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Render at 1 device pixel per CSS pixel. On a Retina display the default
+    // min(dpr, 2) means ~4x the pixels, and every screen-space effect later in this
+    // project (AO, volumetrics, bloom) scales directly with that. Anti-aliasing comes
+    // from SMAA in the post stack instead. `?rs=2` forces the old behaviour for
+    // side-by-side comparison.
+    const rsParam = Number(new URLSearchParams(location.search).get('rs'));
+    const renderScale = Number.isFinite(rsParam) && rsParam > 0
+      ? Math.min(rsParam, 2)
+      : 1;
+    this.renderer.setPixelRatio(renderScale);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
