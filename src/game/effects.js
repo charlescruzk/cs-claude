@@ -3,21 +3,52 @@ import { events } from '../core/events.js';
 import { rayAABB } from '../core/physics.js';
 
 // Tactical effects, driven by the 'tactical' events P1-5 emits on a nade detonation.
-// A frag damages every bot within FRAG_RADIUS (falloff by distance), throws an
-// expanding emissive sphere, and a brief orange screen flash; it never self-damages
-// the thrower. A flash whiteouts the screen (a full-screen div eased 1 -> 0) only if
-// the player has line of sight to the impact. The 3D explosion lives in the scene;
-// the two screen overlays are opacities hud.js paints each frame.
-const FRAG_RADIUS = 4;      // m, the blast reach
+// A frag damages every bot within FRAG_RADIUS (falloff by distance and line of
+// sight) and the thrower too — a frag at your own feet is your own fault. A flash
+// whiteouts the screen (a full-screen div eased 1 -> 0) if the player has line of
+// sight to the impact, and blinds any bot that can see it, scaled by how directly
+// it faces the flash. The 3D explosion lives in the scene; the two screen overlays
+// are opacities hud.js paints each frame.
+const FRAG_RADIUS = 8;      // m, the blast reach
 const FRAG_DMG = 100;       // full damage at the center, 0 at the edge
 const EXPLOSION_T = 0.3;    // s, the flash sphere's fade
 const FRAG_FLASH_T = 0.15; // s, the brief orange screen flash
 const WHITEOUT_T = 2.0;     // s, the white-out fade
 const FLASH_RANGE = 20;     // m, how far a flash can whiteout
+const BLIND_MAX = 3.5;      // s, full-exposure blind duration (bot.js BLIND_HEAVY = 0.45 × this)
+const BOT_COM = 0.9;        // m, bot centre of mass — frag blast measures from here
+const BOT_EYE = 1.6;        // m, bot eye height — flash exposure measures from here
 
 // Reused across every line-of-sight ray (the flash test runs at most a few times).
 const _eye = new THREE.Vector3();
 const _ray = new THREE.Vector3();
+// Scratch for the bot-facing dot in _flashNade (per detonation, not per frame).
+const _facing = new THREE.Vector3();
+
+// How exposed a viewer is to a detonation, 0 (none) to 1 (full). `viewDir` may
+// be null for a pure blast check, where facing is irrelevant. The ray scan is
+// the one _playerSees used — every consumer shares a single LOS test.
+function exposure(eyeX, eyeY, eyeZ, viewDir, pos, colliders, range) {
+  const dx = pos.x - eyeX;
+  const dy = pos.y - eyeY;
+  const dz = pos.z - eyeZ;
+  const dist = Math.hypot(dx, dy, dz);
+  if (dist > range) return 0;
+  if (dist > 1e-3) {
+    _eye.set(eyeX, eyeY, eyeZ);
+    _ray.set(dx, dy, dz).normalize();
+    for (const c of colliders) {
+      if (rayAABB(_eye, _ray, c.min, c.max, dist) !== null) return 0;
+    }
+  }
+  let e = 1 - dist / range;
+  if (viewDir && dist > 1e-3) {
+    // Facing: dot of the eye→detonation direction with viewDir, remapped so
+    // straight-on is 1.0, perpendicular ~0.35, directly away ~0.15.
+    e *= Math.max(0.15, 0.35 + 0.65 * _ray.dot(viewDir));
+  }
+  return e;
+}
 
 // One geometry and four materials, built once at startup and reused by every
 // explosion. Each pooled mesh gets its own material so two simultaneous
@@ -82,13 +113,21 @@ export class Effects {
     else this._flashNade(e.pos);
     }
 
-       // Radius damage to every bot target, falloff by distance. The frag is a
-      // bot's killer, not a source of self-damage, so the thrower is untouched.
+       // Radius damage to every bot target, falloff by distance and line of
+      // sight — a wall between the blast and the target protects it. The thrower
+      // is not in getTargets(), so a frag at your own feet is handled separately.
   _frag(pos) {
     for (const bot of this.getTargets()) {
       if (bot.dead) continue;
-      const d = bot.pos.distanceTo(pos);
-      if (d < FRAG_RADIUS) bot.takeDamage(FRAG_DMG * (1 - d / FRAG_RADIUS), false, null);
+      const e = exposure(bot.pos.x, bot.pos.y + BOT_COM, bot.pos.z, null, pos, this.colliders, FRAG_RADIUS);
+      if (e > 0) bot.takeDamage(FRAG_DMG * e, false, null);
+      }
+    // Self-damage: the player's eye, same exposure check. Guard this.player.state
+    // — main.js assigns it after construction, so it may not exist in every path.
+    if (this.player.state) {
+      const pe = exposure(this.player.pos.x, this.player.pos.y + this.player.eye,
+        this.player.pos.z, null, pos, this.colliders, FRAG_RADIUS);
+      if (pe > 0) this.player.state.takeDamage(FRAG_DMG * pe, false, null, 'frag', pos);
       }
     this._spawnExplosion(pos);
     this._flashLeft = FRAG_FLASH_T;
@@ -96,26 +135,25 @@ export class Effects {
     }
 
   _flashNade(pos) {
-    if (!this._playerSees(pos)) return; // no line of sight, no whiteout
-    this._whiteoutLeft = WHITEOUT_T;
-    this.whiteout = 1;
+    if (this._playerSees(pos)) {
+      this._whiteoutLeft = WHITEOUT_T;
+      this.whiteout = 1;
+      }
+    // Blind every bot that can see the flash, scaled by how directly it faces it.
+    // Duck-typed on `blind` so effects never reach into a bot's internals.
+    for (const bot of this.getTargets()) {
+      if (bot.dead || typeof bot.blind !== 'function') continue;
+      _facing.set(-Math.sin(bot.yaw), 0, -Math.cos(bot.yaw));
+      const e = exposure(bot.pos.x, bot.pos.y + BOT_EYE, bot.pos.z, _facing, pos, this.colliders, FLASH_RANGE);
+      if (e > 0) bot.blind(BLIND_MAX * e);
+      }
     }
 
        // Can the player's eye see the impact? Within FLASH_RANGE and no collider
       // between eye and impact (a wall between them blocks the whiteout).
   _playerSees(pos) {
-    const dx = pos.x - this.player.pos.x;
-    const dz = pos.z - this.player.pos.z;
-    if (Math.hypot(dx, dz) > FLASH_RANGE) return false;
-    _eye.set(this.player.pos.x, this.player.pos.y + this.player.eye, this.player.pos.z);
-    _ray.set(pos.x - _eye.x, pos.y - _eye.y, pos.z - _eye.z);
-    const len = _ray.length();
-    if (len < 1e-3) return true;
-    _ray.normalize();
-    for (const c of this.colliders) {
-      if (rayAABB(_eye, _ray, c.min, c.max, len) !== null) return false;
-      }
-    return true;
+    return exposure(this.player.pos.x, this.player.pos.y + this.player.eye,
+      this.player.pos.z, null, pos, this.colliders, FLASH_RANGE) > 0;
     }
 
        // An emissive sphere at the impact that grows to the blast radius and fades
