@@ -13,6 +13,7 @@ export class Input {
     this._downCodes = new Set();            // codes currently held (edge detection)
     this.locked = false;
     this._onLockChange = null;              // callback(locked), set by main.js
+    this._onLockError = null;                   // callback(msg), set by main.js
     this._bind();
    }
 
@@ -22,7 +23,21 @@ export class Input {
    }
 
   requestLock() {
-    this.canvas.requestPointerLock();
+     // requestPointerLock can refuse the lock (a browser setting, an embedded or
+     // inactive document, or Chrome's ~1 s cooldown after an Esc exit) and fail
+     // silently. Catch both the synchronous throw and the promise rejection so the
+     // failure is reported instead of leaving the game permanently dead.
+    let p;
+    try {
+      p = this.canvas.requestPointerLock();
+     } catch (err) {
+      if (this._onLockError) this._onLockError(err.message);
+      return;
+     }
+     // Chrome returns a promise; Safari/older Chrome return undefined.
+    if (p && p.catch) p.catch((err) => {
+      if (this._onLockError) this._onLockError(err.name + ': ' + err.message);
+     });
    }
 
   _bind() {
@@ -60,6 +75,11 @@ export class Input {
       this.locked = document.pointerLockElement === this.canvas;
       if (this._onLockChange) this._onLockChange(this.locked);
      });
+      // A refused lock must not die silently: the whole game is gated on pointer
+      // lock, so surface the failure the same way index.html surfaces boot errors.
+    document.addEventListener('pointerlockerror', () => {
+      if (this._onLockError) this._onLockError('pointerlockerror (browser refused the lock)');
+       });
      // Right button is secondary fire; kill the browser context menu on it.
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
    }

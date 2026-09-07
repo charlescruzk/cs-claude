@@ -36,6 +36,15 @@ engine.onError = (err) => { status.textContent = 'UPDATE ERROR: ' + err.message;
 
 overlay.addEventListener('click', () => input.requestLock());
 input._onLockChange = (locked) => overlay.classList.toggle('hidden', locked);
+// A refused pointer lock must not die silently: the whole game is gated on it, so
+// report the failure on screen the way index.html reports a boot error.
+input._onLockError = (msg) => {
+  status.textContent = 'POINTER LOCK FAILED: ' + msg +
+     '\nThe game only runs while the pointer is locked. Click again, or check the site\'s ' +
+     'pointer-lock permission in your browser settings.';
+  status.style.color = '#ff6b6b';
+  status.style.whiteSpace = 'pre-wrap';
+};
 
 // Build the blockout.
 const map = buildMap(mapData, engine.scene);
