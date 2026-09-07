@@ -54,3 +54,26 @@ export function makeColliderBoxes(colliders) {
   }
   return group;
 }
+
+// A frozen game must say why. While locked the loop must advance every frame; if
+// engine.frames stops climbing the loop has stalled, so report the exact state that
+// explains it on #boot-status instead of sitting on a dead frame. On a healthy
+// machine the loop always advances while locked, so the watchdog stays silent. It is
+// always on (not flag-gated) because it is the only thing that turns a silent freeze
+// into a diagnosis.
+export function makeFrameWatchdog(engine, input, status, round) {
+  let lastFrames = 0;
+  setInterval(() => {
+    const advancing = engine.frames > lastFrames;
+    lastFrames = engine.frames;
+    if (!input.locked || advancing) return;
+    status.textContent =
+          'FRAME LOOP STALLED\n' +
+          `frames=${engine.frames} locked=${input.locked} ` +
+          `lockEl=${document.pointerLockElement ? document.pointerLockElement.id : 'null'}\n` +
+          `visibility=${document.visibilityState} round=${round.state} t=${round.time.toFixed(1)} ` +
+          `updateErrored=${engine._reportedError}`;
+    status.style.color = '#ff6b6b';
+    status.style.whiteSpace = 'pre-wrap';
+    }, 1000);
+}

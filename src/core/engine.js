@@ -33,6 +33,7 @@ export class Engine {
 
     this._frame = this._frame.bind(this);
     this._running = false;
+    this.frames = 0;                // frames the loop has run; the watchdog reads this
     this._reportedError = false; // an update error is reported once, not every frame
     this.onError = null; // optional main.js hook: show the error on screen
   }
@@ -52,6 +53,7 @@ export class Engine {
   }
 
   _frame() {
+    this.frames++; // count every rAF call so the watchdog can tell a stall from life
     if (!this._running) return;
     requestAnimationFrame(this._frame);
     let dt = this.clock.getDelta();

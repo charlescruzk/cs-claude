@@ -23,7 +23,7 @@ import { ProjectileManager } from './game/projectile.js';
 import { Tactical } from './weapons/tactical.js';
 import { Effects } from './game/effects.js';
 import { spawnFor } from './game/teams.js';
-import { debugEnabled, makeFpsCounter, makeColliderBoxes } from './core/debug.js';
+import { debugEnabled, makeFpsCounter, makeColliderBoxes, makeFrameWatchdog } from './core/debug.js';
 
 const status = document.getElementById('boot-status');
 const canvas = document.getElementById('game-canvas');
@@ -155,4 +155,6 @@ engine.start((dt) => {
   fps(dt);
 });
 
+// Watchdog (debug.js): a silent stall while locked becomes an on-screen diagnosis.
+makeFrameWatchdog(engine, input, status, round);
 status.textContent = `three r${THREE.REVISION} — P0-8 Round loop (freeze/live/end + scoreboard)`;
