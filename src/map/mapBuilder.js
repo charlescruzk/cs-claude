@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { makeTexture } from './textures.js';
+import { makeTexture, makeRoughness } from './textures.js';
+
+// Per-surface roughness. Concrete is nearly matte; crates are slightly less so.
+const ROUGHNESS = { concrete: 0.95, crate: 0.80, sand: 1.0, floor: 0.90 };
 
 // Turn `mapData` into visible meshes plus a flat list of AABB colliders.
 // Returns { colliders, spawns, sites }. `colliders` holds one { min, max } pair per
@@ -15,7 +18,12 @@ export function buildMap(mapData, scene) {
   floorTex.repeat.set(30, 30);
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(62, 62),
-    new THREE.MeshLambertMaterial({ map: floorTex })
+    new THREE.MeshStandardMaterial({
+      map: floorTex,
+      roughnessMap: makeRoughness('floor'),
+      roughness: 0.9,
+      metalness: 0.0,
+    })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;
@@ -51,11 +59,16 @@ export function buildMap(mapData, scene) {
   return { colliders, spawns: mapData.spawns, sites: mapData.sites };
 }
 
-// Lazily build and share a Lambert material per texture kind.
+// Lazily build and share a Standard material per texture kind.
 function getMaterial(cache, kind) {
   let mat = cache.get(kind);
   if (!mat) {
-    mat = new THREE.MeshLambertMaterial({ map: makeTexture(kind) });
+    mat = new THREE.MeshStandardMaterial({
+      map: makeTexture(kind),
+      roughnessMap: makeRoughness(kind),
+      roughness: ROUGHNESS[kind] ?? 0.9,
+      metalness: 0.0,
+    });
     cache.set(kind, mat);
    }
   return mat;

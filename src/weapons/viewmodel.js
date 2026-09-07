@@ -34,7 +34,7 @@ export class Viewmodel {
    // muzzle, hidden until a shot. The whole rig sits low and to the right.
   _build(camera) {
     this.gun = new THREE.Group();
-    const mat = new THREE.MeshLambertMaterial({ color: 0x222228 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.40, metalness: 0.60 });
     this.body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.5), mat);
     this.body.position.set(0, 0, -0.25);
     this.barrel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.34), mat);

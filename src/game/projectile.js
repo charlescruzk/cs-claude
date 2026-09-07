@@ -25,7 +25,7 @@ export class Projectile {
     this.onImpact = opts.onImpact || null;
      // A small sphere as the visible nade; color set per kind by the caller.
     this._geo = new THREE.SphereGeometry(RADIUS, 12, 8);
-    this._mat = new THREE.MeshLambertMaterial({ color: opts.color || 0xcc3333 });
+    this._mat = new THREE.MeshStandardMaterial({ color: opts.color || 0xcc3333, roughness: 0.55, metalness: 0.0 });
     this.mesh = new THREE.Mesh(this._geo, this._mat);
     this.mesh.position.copy(this.pos);
     scene.add(this.mesh);

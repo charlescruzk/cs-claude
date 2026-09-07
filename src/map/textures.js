@@ -61,6 +61,37 @@ export function makeTexture(kind) {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(4, 4);
   tex.needsUpdate = true;
+  tex.colorSpace = THREE.SRGBColorSpace; // colour map — must be sRGB
   cache.set(kind, tex);
+  return tex;
+}
+
+const roughCache = new Map();
+
+// A greyscale roughness map built from the same grain idea as the colour texture:
+// darker = smoother, lighter = rougher. Deliberately NOT marked sRGB — roughness is
+// data, not colour, and tagging it sRGB silently corrupts the values.
+export function makeRoughness(kind) {
+  if (roughCache.has(kind)) return roughCache.get(kind);
+
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#b4b4b4';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 2600; i++) {
+    const v = 140 + ((Math.random() * 70) | 0);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect((Math.random() * size) | 0, (Math.random() * size) | 0, 1, 1);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
+  tex.needsUpdate = true;
+  roughCache.set(kind, tex);
   return tex;
 }
