@@ -9,6 +9,12 @@ import { getGun } from '../geo/gun.js';
 const FLASH_TIME = 0.04;
 const RECOVER = 0.2;
 
+// Weapon bob. Larger than a camera bob would be — the gun is close to the lens, so
+// the same physical motion reads smaller, and the world is not moving with it.
+const BOB_X = 0.014;   // m — side to side, at step frequency
+const BOB_Y = 0.010;   // m — up and down, at twice step frequency (both feet)
+const BOB_ROLL = 0.02; // rad — slight roll into the sway, so it is not a pure slide
+
 export class Viewmodel {
   constructor(camera, controller, weapon) {
     this.camera = camera;
@@ -69,8 +75,18 @@ export class Viewmodel {
        // Gun slides back toward rest quickly.
     this.kick *= Math.pow(0.02, dt);
     if (this.kick < 0.002) this.kick = 0;
+
+       // Weapon bob, driven by the controller's step phase so the gun, the footstep
+       // sounds and the player's stride all agree. The camera never moves — that is
+       // the entire point: the world stays readable while the weapon shows the walk.
+    const amp = this.controller.bobAmp || 0;
+    const phase = this.controller.bobPhase || 0;
+    const bx = Math.sin(phase) * BOB_X * amp;
+    const by = Math.sin(phase * 2) * BOB_Y * amp;
+    this.gun.position.x = this.gunBase.x + bx;
+    this.gun.position.y = this.gunBase.y + this.kick * 0.5 + by;
     this.gun.position.z = this.gunBase.z + this.kick;
-    this.gun.position.y = this.gunBase.y + this.kick * 0.5;
+    this.gun.rotation.z = -bx * (BOB_ROLL / BOB_X);
 
        // Muzzle flash on for its window.
     this.flashTimer -= dt;

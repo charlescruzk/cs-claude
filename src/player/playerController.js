@@ -23,11 +23,9 @@ const GROUND_ACCEL = 12;   // ground acceleration coefficient
 const AIR_ACCEL = 12;      // air acceleration coefficient
 const AIR_WISH_CAP = 0.8;  // m/s — the cap that makes air-strafing work
 
-// Head bob and landing dip are camera-local offsets only — they never touch
-// this.pos, this.eye, or the shot origin.
-const BOB_VERT = 0.035;     // m — vertical bob amplitude at run speed
-const BOB_SWAY = 0.022;     // m — horizontal sway amplitude
-const BOB_EASE = 0.15;      // s — time constant for the bob fading in/out
+// The landing dip is a camera-local offset only — it never touches this.pos,
+// this.eye, or the shot origin. The head bob moved to the viewmodel: bobbing
+// the camera moves the whole world; bobbing the weapon does not.
 const LAND_DIP_MAX = 0.09;  // m — deepest landing dip, at a full-speed fall
 const LAND_DIP_HALF = 0.18; // s — half-life of the landing dip recovery
 
@@ -56,8 +54,10 @@ export class PlayerController {
     this.moveScale = 1; // 0.5 while scoped, 1 otherwise (set by main.js)
     this._stepDist = 0;   // distance since the last footstep
     this._wasGrounded = true;
-    this._bobAmp = 0;     // 0..1 — head-bob amplitude, eased toward 0 when still
+    this._bobAmp = 0;     // 0..1 — weapon-bob amplitude, eased toward 0 when still
     this._landDip = 0;    // m — current landing dip depth, recovers on a half-life
+    this.bobAmp = 0;      // 0..1 — eased bob amplitude, read by the viewmodel
+    this.bobPhase = 0;    // rad — step phase, read by the viewmodel
 
     this.yawObject = new THREE.Object3D();
     this.yawObject.add(this.camera);
@@ -75,6 +75,8 @@ export class PlayerController {
     this.eye = STAND_EYE;
     this._bobAmp = 0;
     this._landDip = 0;
+    this.bobAmp = 0;
+    this.bobPhase = 0;
     }
 
   update(dt, input, colliders) {
@@ -99,7 +101,7 @@ export class PlayerController {
     this._landDip *= Math.exp(-dt * Math.LN2 / LAND_DIP_HALF);
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const bobTarget = !this.disabled && this.grounded && !this.crouching && speed >= 0.5 ? 1 : 0;
-    this._bobAmp += (bobTarget - this._bobAmp) * (1 - Math.exp(-dt / BOB_EASE));
+    this._bobAmp += (bobTarget - this._bobAmp) * (1 - Math.exp(-dt / 0.15)); // 0.15 s fade
 
     this.syncCamera();
     }
@@ -118,8 +120,13 @@ export class PlayerController {
     if (speed < 0.5) { this._stepDist = 0; return; }
     const keys = this.input.keys;
     const walk = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    const stepLen = walk ? 2.8 : 2.0;
+    // Expose the eased amplitude and the step phase for the viewmodel, so the
+    // weapon bob stays in step with the footstep audio.
+    this.bobAmp = this._bobAmp;
+    this.bobPhase = (this._stepDist / stepLen) * Math.PI * 2;
     this._stepDist += speed * dt;
-    if (this._stepDist >= (walk ? 2.8 : 2.0)) {
+    if (this._stepDist >= stepLen) {
       this._stepDist = 0;
       events.emit('step', { walk });
      }
@@ -229,31 +236,7 @@ export class PlayerController {
   syncCamera() {
     this.yawObject.position.set(this.pos.x, this.pos.y, this.pos.z);
     this.yawObject.rotation.y = this.yaw;
-    this.camera.position.set(0, this.eye, 0);
+    this.camera.position.set(0, this.eye - this._landDip, 0);
     this.camera.rotation.x = this.pitch + this.recoil;
-
-    // Head bob and landing dip are camera-local offsets on top of the eye, so
-    // they never touch this.pos, this.eye, or the shot origin.
-    const bob = this._bobOffset();
-    this.camera.position.x += bob.x;
-    this.camera.position.y += bob.y - this._landDip;
-    }
-
-    // Head bob: a camera-local offset driven by the same distance phase as the
-    // footsteps, so the view and the step sounds stay in step. The amplitude
-    // scales with speed (walking bobs less than running) and eases out when
-    // the player stops or leaves the ground.
-  _bobOffset() {
-    if (this._bobAmp === 0) return { x: 0, y: 0 };
-    const speed = Math.hypot(this.vel.x, this.vel.z);
-    const keys = this.input.keys;
-    const walk = keys.has('ShiftLeft') || keys.has('ShiftRight');
-    const stepLen = walk ? 2.8 : 2.0;
-    const phase = (this._stepDist / stepLen) * Math.PI * 2;
-    const amp = this._bobAmp * (speed / RUN);
-    return {
-      x: Math.sin(phase) * BOB_SWAY * amp,
-      y: Math.sin(phase * 2) * BOB_VERT * amp,
-    };
     }
 }
