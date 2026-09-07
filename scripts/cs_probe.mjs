@@ -354,6 +354,59 @@ async function main() {
       });
    console.log('\n=== BEHAVIOR (P1-7 hud) ===');
    console.log(p17 && p17.result ? p17.result.value : '(p1-7 eval failed)');
+
+            // FIX_PROMPT_10 hit feedback: exactly one 'hit' event per damage
+            // instance (the G9 double-emit fix), and the hitmarker lifecycle —
+            // shows on a hit, hides after its duration, headshots look different
+            // from body shots, and a kill beats a hit on the same frame.
+   const hit = await send('Runtime.evaluate', {
+     expression: `(async () => {
+        const g = window.__game; if (!g) return { error: 'no game' };
+        const out = {};
+        const resolveShot = (await import('/src/weapons/hitscan.js')).resolveShot;
+        const cam = g.engine.camera; const bot = g.botManager.bots[0];
+        const origin = bot.box.min.clone(); cam.getWorldPosition(origin);
+        const dir = bot.pos.clone(); dir.y = 0.9; dir.sub(origin).normalize();
+        // G9: one 'hit' per bullet. A single resolved shot at a bot must fire
+        // exactly one 'hit' — the assertion that would have caught the double emit.
+        bot.health = 100; bot.dead = false;
+        let hits = 0;
+        const onHit = () => hits++;
+        g.events.on('hit', onHit);
+        resolveShot(origin, dir, [], [bot], g.weapon.defs[0]);
+        g.events.off('hit', onHit);
+        out.oneHitPerBullet = hits === 1;
+        // Marker lifecycle: shows on a hit, hides after its duration.
+        const hm = g.hitmarker;
+        hm._hide();
+        g.events.emit('hit', { target: bot, damage: 10, headshot: false });
+        out.markerShowsOnHit = hm.root.style.display === 'block';
+        hm.update(0.2); // past the 0.11 s body duration
+        out.markerHidesAfter = hm.root.style.display === 'none';
+        // A hit on the player (being hurt) is not a landed shot — no marker.
+        g.events.emit('hit', { target: 'player', damage: 10, headshot: false });
+        out.playerHurtNoMarker = hm.root.style.display === 'none';
+        // Headshot is visually distinct from a body shot (colour and size).
+        g.events.emit('hit', { target: bot, damage: 10, headshot: false });
+        const bodyColor = hm._ticks[0].style.backgroundColor;
+        const bodyWidth = parseInt(hm._ticks[0].style.width, 10);
+        g.events.emit('hit', { target: bot, damage: 40, headshot: true });
+        const headColor = hm._ticks[0].style.backgroundColor;
+        const headWidth = parseInt(hm._ticks[0].style.width, 10);
+        out.headshotDistinct = bodyColor !== headColor || headWidth > bodyWidth;
+        // A kill on the same frame as a hit shows the kill — the stronger signal.
+        g.events.emit('hit', { target: bot, damage: 10, headshot: false });
+        g.events.emit('kill', { killer: 'player', victim: bot.name, weapon: null, headshot: false });
+        const killWidth = parseInt(hm._ticks[0].style.width, 10);
+        out.killBeatsHit = hm._state === 'kill' && killWidth > headWidth;
+        hm._hide();
+        return out;
+        })()`,
+     returnByValue: true,
+     awaitPromise: true,
+     });
+   console.log('\n=== BEHAVIOR (hit feedback) ===');
+   console.log(hit && hit.result ? hit.result.value : '(hit feedback eval failed)');
    ws.close();
 
    try { server.kill('SIGKILL'); } catch { /* already gone */ }
