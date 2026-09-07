@@ -29,6 +29,7 @@ import { NetClient } from './net/netClient.js';
 import { RemotePlayers } from './net/remotePlayers.js';
 import { packFlags } from './net/protocol.js';
 import { NetMenu } from './hud/netMenu.js';
+import { SettingsMenu } from './hud/settingsMenu.js';
 import { weaponData, WEAPON_KEYS } from './weapons/weaponData.js';
 import { debugEnabled, makeFpsCounter, makeColliderBoxes, makeFrameWatchdog,
          diagEnabled, makeDiagPanel } from './core/debug.js';
@@ -154,6 +155,11 @@ net.onStatus = (text, kind) => {
   }
 };
 
+// Settings: a pause-screen panel (bottom-left) for sensitivity, weapon bob, volume
+// and invert-Y. It applies live and persists; it never runs while the pointer is
+// locked, so it has no per-frame cost.
+const settingsMenu = new SettingsMenu({ controller, viewmodel, audio });
+
 // Bots plus peers in one array for resolveShot. Rebuilt once per shot, never per
 // pellet (a shotgun pull is 8), and skipped entirely while offline so the
 // single-player shot path allocates and copies nothing.
@@ -240,7 +246,7 @@ const diagPanel = diagEnabled() ? makeDiagPanel(engine, input, round, controller
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
   hud, round, scoreboard, buyMenu, projectiles, tactical, effects, audio, sfx,
-  net, remotePlayers, netMenu,
+  net, remotePlayers, netMenu, settingsMenu,
   three: THREE.REVISION,
 };
 

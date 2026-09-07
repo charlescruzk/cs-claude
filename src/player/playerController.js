@@ -52,6 +52,8 @@ export class PlayerController {
     this.frozen = false; // set by the round loop during freeze
     this.disabled = false; // set when the player dies
     this.moveScale = 1; // 0.5 while scoped, 1 otherwise (set by main.js)
+    this.sens = SENS;   // mouse sensitivity, live-tunable from the settings panel
+    this.invertY = false; // negates the pitch delta when set
     this._stepDist = 0;   // distance since the last footstep
     this._wasGrounded = true;
     this._bobAmp = 0;     // 0..1 — weapon-bob amplitude, eased toward 0 when still
@@ -134,8 +136,8 @@ export class PlayerController {
 
     // Yaw on the parent, pitch on the camera, pitch clamped to ±89°.
   look() {
-    this.yaw -= this.input.mouseDX * SENS;
-    this.pitch -= this.input.mouseDY * SENS;
+    this.yaw -= this.input.mouseDX * this.sens;
+    this.pitch -= this.input.mouseDY * this.sens * (this.invertY ? -1 : 1);
     this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.pitch));
     }
 

@@ -22,6 +22,7 @@ export class Viewmodel {
     this.weapon = weapon;
     this.kick = 0;
     this.flashTimer = 0;
+    this.bobScale = 1; // multiplier on the bob amplitudes; 0 disables the bob entirely
     this._shapeDef = null;
     this._build(camera);
     if (weapon) this._reshape(weapon.def);
@@ -87,8 +88,8 @@ export class Viewmodel {
        // the entire point: the world stays readable while the weapon shows the walk.
     const amp = this.controller.bobAmp || 0;
     const phase = this.controller.bobPhase || 0;
-    const bx = Math.sin(phase) * BOB_X * amp;
-    const by = Math.sin(phase * 2) * BOB_Y * amp;
+    const bx = Math.sin(phase) * BOB_X * amp * this.bobScale;
+    const by = Math.sin(phase * 2) * BOB_Y * amp * this.bobScale;
     this.gun.position.x = this.gunBase.x + bx;
     this.gun.position.y = this.gunBase.y + this.kick * 0.5 + by;
     this.gun.position.z = this.gunBase.z + this.kick;
