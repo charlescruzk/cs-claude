@@ -32,6 +32,7 @@ export function buildMap(mapData, scene) {
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;
+  floor.receiveShadow = true; // the floor catches shadows but casts none
   scene.add(floor);
 
    // Group boxes by texture kind, then merge each group into one mesh. Colliders
@@ -64,7 +65,10 @@ export function buildMap(mapData, scene) {
     const mat = getMaterial(matCache, kind);
     mat.map.repeat.set(1, 1);          // UVs carry the tiling now
     mat.roughnessMap.repeat.set(1, 1); // (both maps, or the grain would double-tile)
-    scene.add(new THREE.Mesh(mergeGeometries(geos), mat));
+    const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
    }
 
    // Bombsite rings (visual only, not colliders).

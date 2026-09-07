@@ -158,18 +158,24 @@ export class Bot {
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.0 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(BODY, HEIGHT, BODY), mat);
     body.position.y = HEIGHT / 2;
+    body.castShadow = true;
+    body.receiveShadow = true;
     this.root.add(body);
     const head = new THREE.Mesh(
       new THREE.BoxGeometry(0.4, 0.4, 0.4),
       new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.0 })
       );
     head.position.y = HEIGHT + 0.2;
+    head.castShadow = true;
+    head.receiveShadow = true;
     this.root.add(head);
     const nose = new THREE.Mesh(
       new THREE.BoxGeometry(0.12, 0.12, 0.25),
       new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.65, metalness: 0.0 })
       );
     nose.position.set(0, 1.3, -BODY / 2 - 0.1);
+    nose.castShadow = true;
+    nose.receiveShadow = true;
     this.root.add(nose);
     }
 

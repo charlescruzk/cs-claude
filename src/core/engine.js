@@ -31,6 +31,19 @@ export class Engine {
     this.sun.position.set(60, 90, 40);
     this.scene.add(this.sun);
 
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    // A tight ortho frustum fitted to the real world extents (x/z are -30.5..30.5).
+    // The default frustum would spend the whole shadow map on empty space.
+    const s = this.sun.shadow.camera;
+    s.left = -35; s.right = 35; s.top = 35; s.bottom = -35;
+    s.near = 1; s.far = 220;
+    s.updateProjectionMatrix();
+    this.sun.shadow.bias = -0.0005;
+    this.sun.shadow.normalBias = 0.02;
+
     this._onResize = this._onResize.bind(this);
     window.addEventListener('resize', this._onResize);
 
