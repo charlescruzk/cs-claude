@@ -22,6 +22,23 @@ const _move = new THREE.Vector3();
 const _ray = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 
+// Shared geometry and materials — one set for all bots, never disposed.
+const BODY_GEOMETRY = new THREE.BoxGeometry(BODY, HEIGHT, BODY);
+const HEAD_GEOMETRY = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+const NOSE_GEOMETRY = new THREE.BoxGeometry(0.12, 0.12, 0.25);
+const NOSE_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.65, metalness: 0.0 });
+const _materials = new Map();
+
+// Lazily build and share a Standard material per team colour.
+function getMaterial(color) {
+  let mat = _materials.get(color);
+  if (!mat) {
+    mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.0 });
+    _materials.set(color, mat);
+  }
+  return mat;
+}
+
 // A CT/T bot: a body + head box, a patrol/engage/dead state machine, and the
 // hittable target (box, headBox, onHit) the hitscan resolves against. `player`
 // is the controller, which carries the combat state on `player.state`.
@@ -155,25 +172,19 @@ export class Bot {
   _build(team) {
     this.root = new THREE.Group();
     const color = TEAM_COLOR[this.team] || 0x888888;
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.0 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(BODY, HEIGHT, BODY), mat);
-    body.position.y = HEIGHT / 2;
+    const mat = getMaterial(color);
+    const body = new THREE.Mesh(BODY_GEOMETRY, mat);
+    body.position.y = 0.9;
     body.castShadow = true;
     body.receiveShadow = true;
     this.root.add(body);
-    const head = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.4, 0.4),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.0 })
-      );
-    head.position.y = HEIGHT + 0.2;
+    const head = new THREE.Mesh(HEAD_GEOMETRY, mat);
+    head.position.y = 2.0;
     head.castShadow = true;
     head.receiveShadow = true;
     this.root.add(head);
-    const nose = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.12, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.65, metalness: 0.0 })
-      );
-    nose.position.set(0, 1.3, -BODY / 2 - 0.1);
+    const nose = new THREE.Mesh(NOSE_GEOMETRY, NOSE_MATERIAL);
+    nose.position.set(0, 1.3, -0.5);
     nose.castShadow = true;
     nose.receiveShadow = true;
     this.root.add(nose);
