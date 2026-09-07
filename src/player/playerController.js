@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { resolveCapsuleVsBoxes } from '../core/physics.js';
+import { resolveCapsuleVsBoxes, aabbOverlap } from '../core/physics.js';
 
 // Movement is tuned to feel like 1.6. Jump is 7.2 m/s (peak ~1.3 m under gravity 20):
 // high enough to clear a 1 m crate, short of a 2 m wall — that is the P0-4 target.
@@ -158,9 +158,24 @@ export class PlayerController {
      }
     this.grounded = grounded;
 
+     // Block the stand when a stand-height capsule would overlap geometry above the
+     // feet (e.g. crouched under a low overhang) — stay crouched until you walk clear.
+     // Colliders at or below step-over height are the surface we stand on, not headroom.
+    if (!this.crouching) {
+      const standBox = {
+        min: new THREE.Vector3(this.pos.x - RADIUS, this.pos.y, this.pos.z - RADIUS),
+        max: new THREE.Vector3(this.pos.x + RADIUS, this.pos.y + STAND_H, this.pos.z + RADIUS),
+      };
+      for (const c of this.colliders) {
+        if (c.max.y - this.pos.y <= 0.6) continue; // step-over height, not headroom
+        if (aabbOverlap(standBox, c)) { this.crouching = true; break; }
+      }
+    }
+
      // Crouch lowers the capsule height and the eye.
     this.height = this.crouching ? CROUCH_H : STAND_H;
-    this.eye = this.crouching ? CROUCH_EYE : STAND_EYE;
+    const targetEye = this.crouching ? CROUCH_EYE : STAND_EYE;
+    this.eye += (targetEye - this.eye) * (1 - Math.exp(-dt / 0.06));
     }
 
     // Place the rig: yaw object at the feet, camera at eye height, pitch on the camera.

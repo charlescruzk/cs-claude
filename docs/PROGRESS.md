@@ -27,6 +27,13 @@ attempts (write what you tried). Add a one-line note per task.
   GROUND_ACCEL 12 / AIR_ACCEL 12 / AIR_WISH_CAP 0.8). `RUN`/`WALK`/`CROUCH` are now the
   target speed. Verified by reading: with no key held `dx`/`dz` are 0, so `add` pushes
   nothing and friction alone brings the player to rest.
+- [x] Task 5 — block standing into geometry, ease crouch eye height. Before growing the
+  capsule, `vertical()` builds a stand-height box at the current position and tests it with
+  the existing `aabbOverlap` helper (imported from `core/physics.js`), skipping colliders at
+  or below step-over height (the standing surface, not headroom); on overlap it forces
+  `crouching = true` this frame. `height` stays a hard switch; `eye` eases exponentially
+  toward the target (`1 - exp(-dt/0.06)`, same pattern as the scope FOV). `spawnAt()` still
+  sets both directly.
 
 ## RESUME — 2026-09-06 (diagnostic pass, `docs/FIX_PROMPT_2.md`)
 
