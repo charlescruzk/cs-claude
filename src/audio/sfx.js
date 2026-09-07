@@ -27,7 +27,7 @@ export class Sfx {
     events.on('switch', () => this.click(0.08));
     events.on('step', (p) => this.step(p && p.walk));
     events.on('land', (p) => this.land(p ? p.speed : 4));
-    events.on('roundState', (s) => { if (s === 'live') this.roundStart(); });
+    events.on('roundState', (p) => { if (p && p.state === 'live') this.roundStart(); });
   }
 
   // --- helpers ---------------------------------------------------------------
