@@ -15,6 +15,7 @@ const LOSE_LOS = 2.0;   // disengage 2 s after losing sight
 const EYE = 1.6;        // bot eye height
 const RADIUS = 0.4;
 const HEIGHT = 1.8;
+const GRAVITY = 20;     // same gravity as the player
 const BODY = 0.8;       // body box side
 const REACH = 1.5;      // a waypoint counts reached within this distance
 const TEAM_COLOR = { ct: 0x3355cc, t: 0xcc6633 };
@@ -36,6 +37,8 @@ export class Bot {
     this.losTimer = 0;
     this.hasLOS = false;
     this.pos = new THREE.Vector3();
+    this.vy = 0;
+    this.grounded = true;
     this.yaw = 0;
     this._wp = -1;
     this.box = { min: new THREE.Vector3(), max: new THREE.Vector3() };
@@ -48,6 +51,8 @@ export class Bot {
     // Place the bot, wake it, and reset its combat/animation state.
    spawnAt(spawn) {
     this.pos.set(spawn.x, 0, spawn.z);
+    this.vy = 0;
+    this.grounded = true;
     this.yaw = 0;
     this.health = 100;
     this.dead = false;
@@ -68,7 +73,8 @@ export class Bot {
     if (this.dead) return;
     this._detect(player, colliders, dt);
     if (this.state === 'engage') this._engage(dt, player);
-    else this._patrol(dt, colliders);
+    else this._patrol(dt);
+    this._vertical(dt, colliders);
     this._syncMesh();
     }
 
@@ -112,7 +118,7 @@ export class Bot {
     }
 
      // Walk toward the current waypoint, sliding off walls like the player.
-  _patrol(dt, colliders) {
+  _patrol(dt) {
     if (this._wp < 0) this.pickTarget();
     const wp = waypoints[this._wp];
      _move.set(wp[0] - this.pos.x, 0, wp[1] - this.pos.z);
@@ -125,9 +131,21 @@ export class Bot {
      _move.z /= dist;
     this.pos.x += _move.x * SPEED * dt;
     this.pos.z += _move.z * SPEED * dt;
-    resolveCapsuleVsBoxes(this.pos, RADIUS, HEIGHT, colliders, { vy: 0 });
-    this.pos.y = 0; // bots stay on the floor in P0
     this._face(wp[0], wp[1]);
+    }
+
+     // Gravity and ground resolution, mirroring playerController.vertical(): fall,
+     // let the resolver land us on box tops, and clamp only below the floor plane.
+  _vertical(dt, colliders) {
+    this.vy -= GRAVITY * dt;
+    this.pos.y += this.vy * dt;
+    let grounded = resolveCapsuleVsBoxes(this.pos, RADIUS, HEIGHT, colliders, { vy: this.vy });
+    if (this.pos.y <= 0) {
+      this.pos.y = 0;
+      if (this.vy < 0) this.vy = 0;
+      grounded = true;
+    }
+    this.grounded = grounded;
     }
 
   pickTarget() {
@@ -177,11 +195,11 @@ export class Bot {
 
      // Push the bot's transform to its mesh and refresh the hittable boxes.
   _syncMesh() {
-    this.root.position.set(this.pos.x, 0, this.pos.z);
+    this.root.position.set(this.pos.x, this.pos.y, this.pos.z);
     this.root.rotation.y = this.yaw;
-    this.box.min.set(this.pos.x - BODY / 2, 0, this.pos.z - BODY / 2);
-    this.box.max.set(this.pos.x + BODY / 2, HEIGHT, this.pos.z + BODY / 2);
-    this.headBox.min.set(this.pos.x - 0.2, HEIGHT, this.pos.z - 0.2);
-    this.headBox.max.set(this.pos.x + 0.2, HEIGHT + 0.4, this.pos.z + 0.2);
+    this.box.min.set(this.pos.x - BODY / 2, this.pos.y, this.pos.z - BODY / 2);
+    this.box.max.set(this.pos.x + BODY / 2, this.pos.y + HEIGHT, this.pos.z + BODY / 2);
+    this.headBox.min.set(this.pos.x - 0.2, this.pos.y + HEIGHT, this.pos.z - 0.2);
+    this.headBox.max.set(this.pos.x + 0.2, this.pos.y + HEIGHT + 0.4, this.pos.z + 0.2);
     }
 }
