@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeTexture, makeRoughness } from './textures.js';
+import { beveledBox, boxProjectUvs } from '../geo/shapes.js';
 
 // Per-surface roughness. Concrete is nearly matte; crates are slightly less so.
 const ROUGHNESS = { concrete: 0.95, crate: 0.80, sand: 1.0, floor: 0.90 };
@@ -17,10 +18,9 @@ export function buildMap(mapData, scene) {
    // controller's ground check, not by the collider list, so it is not added below.
   const floorTex = makeTexture('floor');
   const floorGeo = new THREE.PlaneGeometry(62, 62);
-  // One tile covers 2 m (62/2 = 31 tiles). The cached texture's repeat is 4x4, so
-  // the UVs are scaled by 31/4 = 7.75 to land on that density without mutating the
-  // shared texture object (the latent bug this replaces).
-  scaleUvs(floorGeo, 7.75, 7.75);
+  // One tile covers 2 m, carried in the UVs like every other surface; the material
+  // repeat is 1x1 to match the boxes (overriding the cached texture's 4x4 repeat).
+  boxProjectUvs(floorGeo, 2);
   const floor = new THREE.Mesh(
     floorGeo,
     new THREE.MeshStandardMaterial({
@@ -30,6 +30,8 @@ export function buildMap(mapData, scene) {
       metalness: 0.0,
     })
   );
+  floor.material.map.repeat.set(1, 1);
+  floor.material.roughnessMap.repeat.set(1, 1);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;
   floor.receiveShadow = true; // the floor catches shadows but casts none
@@ -57,8 +59,11 @@ export function buildMap(mapData, scene) {
   for (const [kind, boxes] of byKind) {
     const geos = boxes.map((box) => {
       const [w, h, d] = box.size;
-      const geo = new THREE.BoxGeometry(w, h, d);
-      scaleBoxUvs(geo, w, h, d);
+      // Chamfer by the box's smallest dimension: 2 cm on a 1 m crate, 4 cm on
+      // walls and large masses. Visual only — colliders still use the full box.
+      const chamfer = Math.min(w, h, d) < 1.5 ? 0.02 : 0.04;
+      const geo = beveledBox(w, h, d, chamfer);
+      boxProjectUvs(geo, 2);
       geo.translate(box.pos[0], box.pos[1], box.pos[2]);
       return geo;
     });
@@ -83,37 +88,6 @@ export function buildMap(mapData, scene) {
     }
 
   return { colliders, spawns: mapData.spawns, sites: mapData.sites };
-}
-
-// Scale a BoxGeometry's UVs so one texture tile covers 2 m. A BoxGeometry's UVs
-// run 0→1 per face; multiply each face's pairs by that face's size in metres / 2.
-// Face order is +X, -X, +Y, -Y, +Z, -Z, each face 4 vertices (8 uv floats).
-function scaleBoxUvs(geo, w, h, d) {
-  const uv = geo.attributes.uv.array;
-  const scales = [
-    [d / 2, h / 2], [d / 2, h / 2],
-    [w / 2, d / 2], [w / 2, d / 2],
-    [w / 2, h / 2], [w / 2, h / 2],
-  ];
-  for (let f = 0; f < 6; f++) {
-    const su = scales[f][0], sv = scales[f][1];
-    for (let v = 0; v < 4; v++) {
-      const i = (f * 4 + v) * 2;
-      uv[i] *= su;
-      uv[i + 1] *= sv;
-    }
-  }
-  geo.attributes.uv.needsUpdate = true;
-}
-
-// Uniformly scale every UV pair (used for the floor plane).
-function scaleUvs(geo, su, sv) {
-  const uv = geo.attributes.uv.array;
-  for (let i = 0; i < uv.length; i += 2) {
-    uv[i] *= su;
-    uv[i + 1] *= sv;
-  }
-  geo.attributes.uv.needsUpdate = true;
 }
 
 // Lazily build and share a Standard material per texture kind.
