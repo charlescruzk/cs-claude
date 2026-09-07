@@ -16,6 +16,11 @@ const STAND_EYE = 1.6;
 const CROUCH_EYE = 1.0;
 const SENS = 0.0025;
 const PITCH_LIMIT = 89 * Math.PI / 180;
+const FRICTION = 5.5;      // ground friction coefficient, per second
+const STOP_SPEED = 1.0;    // m/s floor used in the friction drop calculation
+const GROUND_ACCEL = 12;   // ground acceleration coefficient
+const AIR_ACCEL = 12;      // air acceleration coefficient
+const AIR_WISH_CAP = 0.8;  // m/s — the cap that makes air-strafing work
 
 // The player owns a yaw Object3D (heading) with the camera as a child (pitch).
 // Position is the feet; the camera sits at eye height above the feet.
@@ -63,7 +68,7 @@ export class PlayerController {
         this.vel.x = 0;
         this.vel.z = 0;
         } else {
-        this.horizontal();
+        this.horizontal(dt);
         }
       this.vertical(dt);
      }
@@ -79,7 +84,7 @@ export class PlayerController {
     }
 
     // WASD relative to heading, normalized diagonal, speed by mode. Also jumps.
-  horizontal() {
+  horizontal(dt) {
     const keys = this.input.keys;
     let fwd = 0;
     let strafe = 0;
@@ -104,8 +109,33 @@ export class PlayerController {
       dx /= len;
       dz /= len;
      }
-    this.vel.x = dx * speed;
-    this.vel.z = dz * speed;
+    // Ground friction: scale speed down toward zero, with a floor so slow speeds
+    // still shed velocity at a usable rate. Below the threshold, snap to a stop.
+    if (this.grounded) {
+      const speed2 = Math.hypot(this.vel.x, this.vel.z);
+      if (speed2 < 0.1) {
+        this.vel.x = 0;
+        this.vel.z = 0;
+      } else {
+        const drop = Math.max(speed2, STOP_SPEED) * FRICTION * dt;
+        const scale = Math.max(speed2 - drop, 0) / speed2;
+        this.vel.x *= scale;
+        this.vel.z *= scale;
+      }
+    }
+
+    // Accelerate toward the wish direction, adding only the shortfall against the
+    // target speed. In the air the wish speed is capped, which is what lets a
+    // strafing player steer their trajectory mid-jump.
+    const wishSpeed = this.grounded ? speed : Math.min(speed, AIR_WISH_CAP);
+    const accel = this.grounded ? GROUND_ACCEL : AIR_ACCEL;
+    const current = this.vel.x * dx + this.vel.z * dz;
+    const add = wishSpeed - current;
+    if (add > 0) {
+      const accelSpeed = Math.min(accel * wishSpeed * dt, add);
+      this.vel.x += dx * accelSpeed;
+      this.vel.z += dz * accelSpeed;
+    }
 
     if (this.input.justPressed('Space') && this.grounded) {
       this.vel.y = JUMP;

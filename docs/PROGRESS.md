@@ -19,6 +19,15 @@ attempts (write what you tried). Add a one-line note per task.
   extra code: a successful re-lock hides the overlay via `_onLockChange(true)`, a failed one
   re-arms it.
 
+## FIX_PROMPT_4 — RUN 2 (2026-09-06) — physics feel
+
+- [x] Task 4 — acceleration and friction movement model. `horizontal()` became
+  `horizontal(dt)` (call site updated in `update()`); the two direct velocity assignments
+  were replaced with the exact friction + wish-accel model (FRICTION 5.5 / STOP_SPEED 1.0 /
+  GROUND_ACCEL 12 / AIR_ACCEL 12 / AIR_WISH_CAP 0.8). `RUN`/`WALK`/`CROUCH` are now the
+  target speed. Verified by reading: with no key held `dx`/`dz` are 0, so `add` pushes
+  nothing and friction alone brings the player to rest.
+
 ## RESUME — 2026-09-06 (diagnostic pass, `docs/FIX_PROMPT_2.md`)
 
 **State.** The P0/P1 build is **code-complete and logic-verified**: it was driven by hand
