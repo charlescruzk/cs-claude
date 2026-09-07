@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeTexture, makeRoughness } from './textures.js';
 
 // Per-surface roughness. Concrete is nearly matte; crates are slightly less so.
@@ -15,9 +16,13 @@ export function buildMap(mapData, scene) {
    // Floor: a large flat plane at y=0. Collision with it is handled by the
    // controller's ground check, not by the collider list, so it is not added below.
   const floorTex = makeTexture('floor');
-  floorTex.repeat.set(30, 30);
+  const floorGeo = new THREE.PlaneGeometry(62, 62);
+  // One tile covers 2 m (62/2 = 31 tiles). The cached texture's repeat is 4x4, so
+  // the UVs are scaled by 31/4 = 7.75 to land on that density without mutating the
+  // shared texture object (the latent bug this replaces).
+  scaleUvs(floorGeo, 7.75, 7.75);
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(62, 62),
+    floorGeo,
     new THREE.MeshStandardMaterial({
       map: floorTex,
       roughnessMap: makeRoughness('floor'),
@@ -29,20 +34,37 @@ export function buildMap(mapData, scene) {
   floor.position.y = 0;
   scene.add(floor);
 
-   // One mesh + one collider per box.
+   // Group boxes by texture kind, then merge each group into one mesh. Colliders
+   // are built from mapData.boxes in the same order as before, independent of the
+   // meshes. UVs are scaled so one tile covers 2 m, so a 61 m wall and a 1 m crate
+   // tile at the same density.
+  const byKind = new Map();
   for (const box of mapData.boxes) {
     const [x, y, z] = box.pos;
     const [w, h, d] = box.size;
 
-    const mat = getMaterial(matCache, box.tex);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    mesh.position.set(x, y, z);
-    scene.add(mesh);
+    const list = byKind.get(box.tex) || [];
+    list.push(box);
+    byKind.set(box.tex, list);
 
     colliders.push({
       min: new THREE.Vector3(x - w / 2, y - h / 2, z - d / 2),
       max: new THREE.Vector3(x + w / 2, y + h / 2, z + d / 2),
     });
+   }
+
+  for (const [kind, boxes] of byKind) {
+    const geos = boxes.map((box) => {
+      const [w, h, d] = box.size;
+      const geo = new THREE.BoxGeometry(w, h, d);
+      scaleBoxUvs(geo, w, h, d);
+      geo.translate(box.pos[0], box.pos[1], box.pos[2]);
+      return geo;
+    });
+    const mat = getMaterial(matCache, kind);
+    mat.map.repeat.set(1, 1);          // UVs carry the tiling now
+    mat.roughnessMap.repeat.set(1, 1); // (both maps, or the grain would double-tile)
+    scene.add(new THREE.Mesh(mergeGeometries(geos), mat));
    }
 
    // Bombsite rings (visual only, not colliders).
@@ -57,6 +79,37 @@ export function buildMap(mapData, scene) {
     }
 
   return { colliders, spawns: mapData.spawns, sites: mapData.sites };
+}
+
+// Scale a BoxGeometry's UVs so one texture tile covers 2 m. A BoxGeometry's UVs
+// run 0→1 per face; multiply each face's pairs by that face's size in metres / 2.
+// Face order is +X, -X, +Y, -Y, +Z, -Z, each face 4 vertices (8 uv floats).
+function scaleBoxUvs(geo, w, h, d) {
+  const uv = geo.attributes.uv.array;
+  const scales = [
+    [d / 2, h / 2], [d / 2, h / 2],
+    [w / 2, d / 2], [w / 2, d / 2],
+    [w / 2, h / 2], [w / 2, h / 2],
+  ];
+  for (let f = 0; f < 6; f++) {
+    const su = scales[f][0], sv = scales[f][1];
+    for (let v = 0; v < 4; v++) {
+      const i = (f * 4 + v) * 2;
+      uv[i] *= su;
+      uv[i + 1] *= sv;
+    }
+  }
+  geo.attributes.uv.needsUpdate = true;
+}
+
+// Uniformly scale every UV pair (used for the floor plane).
+function scaleUvs(geo, su, sv) {
+  const uv = geo.attributes.uv.array;
+  for (let i = 0; i < uv.length; i += 2) {
+    uv[i] *= su;
+    uv[i + 1] *= sv;
+  }
+  geo.attributes.uv.needsUpdate = true;
 }
 
 // Lazily build and share a Standard material per texture kind.
