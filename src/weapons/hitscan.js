@@ -22,6 +22,11 @@ export function resolveShot(origin, dir, colliders, targets, weapon) {
        nearestT = t;
        _result.kind = 'wall';
        _result.t = t;
+       // Clear the target fields: the scratch object is reused, so a wall hit would
+       // otherwise carry a stale bot reference from an earlier shot. Harmless while
+       // main.js discards the return, but Stage E consumes this for impact effects.
+       _result.target = null;
+       _result.headshot = false;
        result = _result;
       }
      }
