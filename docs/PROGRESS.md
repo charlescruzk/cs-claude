@@ -3,6 +3,115 @@
 Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked after two
 attempts (write what you tried). Add a one-line note per task.
 
+## RESUME — 2026-09-06 (diagnostic pass, `docs/FIX_PROMPT_2.md`)
+
+**State.** The P0/P1 build is **code-complete and logic-verified**: it was driven by hand
+through `engine._updateFn(1/60)` for 900 frames with `input.locked` forced true and
+synthetic input covering mouse look, jumping, all four weapons, firing, scoping, reload,
+frag and flash — **zero exceptions**, the round advanced `freeze` → `live` with the timer
+decrementing, the player moved 4.1 m on held `KeyW`, yaw/pitch tracked the mouse deltas,
+and the bots stayed alive with no `NaN` and no state corruption. **The game logic is
+sound.** This pass did not touch gameplay, weapons, bots, or physics.
+
+The outstanding defect is **not a gameplay bug.** The reported symptom is: pointer lock
+*succeeds* (the overlay clears, which only happens via `_onLockChange(true)` at
+`src/main.js:39`) but the world is frozen and the round timer never counts down. That
+combination is **not reproducible in this headless environment**: every statement in the
+locked block (`src/main.js:137–150`) is gated behind `if (input.locked)`, yet the always-on
+watchdog (a `setInterval`, independent of `requestAnimationFrame`) stayed **silent** across
+the probe — the loop IS advancing and `input.locked` IS true. The leading hypothesis from
+`FIX_PROMPT_2` is therefore "**`requestAnimationFrame` is not firing, or firing with
+`input.locked` false on the user's machine**", which nothing in the code previously reported.
+
+**What this pass added (`FIX_PROMPT_2` Tasks 1–3) — three diagnostics, each inert until
+triggered, none touching gameplay/weapons/bots/physics:**
+
+- **Task 1 — surface a refused pointer lock (`src/core/input.js`, `src/main.js`).**
+   `requestLock()` now catches *both* the synchronous throw and the promise rejection and
+  routes them to a new `_onLockError` callback, and a `pointerlockerror` listener covers the
+  browser-refused path. `main.js` wires `_onLockError` to write a red
+   `POINTER LOCK FAILED: …` to `#boot-status`. The one interaction the whole game gates on
+  now fails loudly instead of silently.
+- **Task 2 — frame-loop watchdog (`src/core/engine.js`, `src/core/debug.js`).**
+   `Engine.frames` counts every `requestAnimationFrame` call; `makeFrameWatchdog` (always
+  on, *not* flag-gated — it is the only thing that turns a silent freeze into a diagnosis)
+  checks once a second whether the loop is advancing while locked and, if not, writes
+   `FRAME LOOP STALLED …` naming `frames / locked / lockEl / visibility / round / t /
+  updateErrored` to `#boot-status`. It is a `setInterval`, so it detects a dead
+   `requestAnimationFrame` loop that `requestAnimationFrame` itself cannot report.
+- **Task 3 — `?diag=1` live readout (`src/core/debug.js`, `src/main.js`).** A
+  fixed-position DOM panel, created from JS (never in index.html) and refreshed every frame
+  with `fps · frames · locked · pointerLockElement · visibilityState · round.state ·
+  round.time · player.pos · engine._reportedError`. Inert without the flag, exactly like
+   `?debug=1`.
+
+**Task 4 — the overlay/lock invariant already holds; no code change, per "don't guess
+which of the two it is."** `#lock-overlay`'s `hidden` class is toggled in **exactly one
+place**, `src/main.js:39` via `_onLockChange(locked) → overlay.classList.toggle('hidden',
+locked)`, and `_onLockChange` fires **only** from the `pointerlockchange` listener with
+`locked = (document.pointerLockElement === this.canvas)` (`src/core/input.js:75`). So
+`overlay.hidden === locked` at every step: the overlay cannot be hidden while the lock is
+up, and the game re-shows it on every lock drop. There is **no second hide path** — the
+buy menu's `exitPointerLock()` (`src/hud/buyMenu.js:46`) routes through the *same*
+`_onLockChange`, it never hides the overlay directly. The "loop alive but `locked` false
+while the overlay is hidden" divergence is therefore **impossible by construction**, and the
+probe shows the loop is alive, so the "`requestAnimationFrame` is not firing" branch is
+**not reproduced here**. Per `FIX_PROMPT_2`'s "do not attempt a fix without knowing which of
+the two it is," this pass makes **no speculative fix** — the actual cause on the user's
+machine is to be captured by the watchdog / `?diag=1` and recorded below.
+
+**Still unverified.** Nothing here is marked *verified* on the strength of `npm run check`
+alone — `check` is syntax-only. The diagnostic `npm run probe` run (after Task 3, with the
+Task 1–3 diagnostics in place) is **clean**: no code errors, a healthy `#boot-status`
+(`three r170 — P0-8 …`, **not** `FRAME LOOP STALLED`), `overlayHidden:true`,
+`roundState:"freeze"`, 4 bots, and every P1-1..P1-7 behavior true. **That `bootStatus` being
+the healthy line — not `FRAME LOOP STALLED` — is the evidence the watchdog is silent, i.e.
+`requestAnimationFrame` is firing in headless.** To catch the user's-machine freeze, serve the
+repo and on the failing machine either load `?diag=1` (live panel) or click **Click to play**
+and read `#boot-status`: a frozen-but-locked world prints `FRAME LOOP STALLED frames=N …`; a
+refused lock prints `POINTER LOCK FAILED: …`. Paste that into the Known-issues entry below.
+
+### Diagnostic-pass probe output (after Tasks 1–3; identical after Task 1)
+
+```
+=== EXCEPTIONS ===
+(no code errors)
+
+=== POST-CLICK STATE ===
+{"hasGame":true,"threeRev":"170","overlayHidden":true,"roundState":"freeze","botCount":4,
+ "bootStatus":"three r170 — P0-8 Round loop (freeze/live/end + scoreboard)"}
+
+=== BEHAVIOR (P1-1..P1-7) ===
+all true — sniper one-shots, shotgun 8-pellet kill, scope forces spread to 0 /
+pistol ignores RMB, kevlar halves + headshot bypasses armor, money on kill persists
+across a round reset, buy menu opens in freeze / greys unaffordable / closes on live,
+frag arcs + impacts under its fuse, frag blast damages near bots only / no self-damage,
+flash whites out on LOS / out-of-range no-op, [B] buy hint in freeze + nade chips dim
+while thrown. (Full per-behavior blocks are the P1-1..P1-7 probe outputs below; they are
+unchanged by Tasks 1–3.)
+
+Console noise only: three SwiftShader "GPU stall due to ReadPixels" performance warnings
+and one 404 (favicon) — both environment noise, not code errors.
+```
+
+**Watchdog output from the failing machine.** Not captured here — this headless
+environment reproduces **no** freeze (the watchdog stayed silent: the loop advances and
+`input.locked` is true). When a frozen-but-locked world is observed on a real machine, the
+expected `#boot-status` is:
+
+```
+FRAME LOOP STALLED
+frames=<N> locked=true lockEl=game-canvas
+visibility=visible round=live t=<T> updateErrored=false
+```
+
+If `visibility=hidden`, the tab is backgrounded and the browser is throttling
+`requestAnimationFrame` (the likely real cause of a "world frozen but timer stopped" report
+— browsers pause rAF for non-visible tabs) — the fix is to keep the tab foregrounded, not a
+code change. If `frames` is frozen at a low number with `visibility=visible` and
+`updateErrored=false`, the loop is genuinely stalled and that output is the next thing to
+record.
+
 ## RESUME — 2026-09-04 (repair pass)
 
 **State.** P0-1 → P0-8 are code-complete and `npm run check` passes (24/24 after adding
@@ -80,6 +189,7 @@ down), so no task here is marked *verified* — only code-complete. Run `npm run
 - P0-8: bots deal flat `BOT_DAMAGE` with no headshot multiplier (`bot._engage` calls `takeDamage(BOT_DAMAGE, false, …)`). Intentional P0 scope — the scoreboard and kill feed still work; per-hit headshot damage for bots is a P0-9 polish item.
 - P0-8: the `Round` loop is a single session-long loop; its `kill` listener is registered once and never unregistered. Harmless for P0; a real match loop would tear it down per match.
 - **Runtime unverified (repair pass).** The first-frame "Click to play does nothing" was *not* the `file://` ES-module block as first suspected — it was a `const grounded` reassignment in `playerController.vertical` that threw on frame one and froze the render (fixed in Task 1). `npm run check` is syntax-only and cannot catch this class of error, so P0-8's runtime acceptance and P0-9's three-clean-rounds check stay unverified until `scripts/cs_probe.mjs` (or a browser) confirms a clean boot. `engine.onError` (Task 2) now writes any update-loop throw to `#boot-status` as `UPDATE ERROR: …`.
+- **Pointer-lock / frame-loop defect, not reproduced (2026-09-06, `FIX_PROMPT_2`).** The reported symptom — pointer lock succeeds (overlay clears) but the world is frozen and the timer never counts down — is **not a gameplay bug** (the 900-frame manual drive is clean) and is **not reproducible in headless** (the always-on `Engine.frames` watchdog stays silent: the loop advances and `input.locked` is true, so `#boot-status` reads the healthy `three r170 …` line, not `FRAME LOOP STALLED`). Three diagnostics were added so the failure is observable on the user's machine instead of silent: a `_onLockError` + `pointerlockerror` + promise-`.catch` path writing `POINTER LOCK FAILED: …` to `#boot-status` (`src/core/input.js`, `src/main.js`); the always-on `makeFrameWatchdog` writing `FRAME LOOP STALLED …` on a stalled loop (`src/core/engine.js`, `src/core/debug.js`); and a `?diag=1` live panel (`src/core/debug.js`, `src/main.js`). The overlay/lock sync invariant **already holds** — `overlay.hidden` is toggled solely by `_onLockChange` from `pointerLockElement === canvas` (`src/main.js:39` / `src/core/input.js:75`), so the "diverged overlay vs lock" branch is impossible and, the loop being alive here, the "`requestAnimationFrame` not firing" branch is unconfirmed; per "don't guess which of the two it is," **no speculative fix was made**. Most likely real cause if `visibility=hidden`: a backgrounded tab with a browser-throttled `requestAnimationFrame`. **Paste the `FRAME LOOP STALLED` / `POINTER LOCK FAILED` output from the failing machine here when captured.**
 
 ---
 
