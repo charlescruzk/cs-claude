@@ -113,7 +113,7 @@ export class Bot {
     this.fireTimer -= dt;
     if (this.fireTimer <= 0) {
       this.fireTimer = FIRE_RATE;
-      if (Math.random() > MISS) player.state.takeDamage(BOT_DAMAGE, false, null, this.name);
+      if (Math.random() > MISS) player.state.takeDamage(BOT_DAMAGE, false, null, this.name, this.pos);
       }
     }
 

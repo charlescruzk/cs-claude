@@ -20,7 +20,11 @@ export class PlayerState {
 
   // `amount` is incoming damage. `headshot` and `weapon` are optional context for
   // the hit/kill events; armor mitigates 50% of non-headshots (see below).
-  takeDamage(amount, headshot = false, weapon = null, killer = 'bot') {
+  // `fromPos` is the attacker's position, snapshotted here into two plain numbers
+  // because the caller hands over a live Vector3 it mutates every frame — a payload
+  // holding a reference would make a threat indicator track the attacker around the
+  // map. Two numbers cannot be aliased and allocate nothing.
+  takeDamage(amount, headshot = false, weapon = null, killer = 'bot', fromPos = null) {
     if (!this.alive) return;
       // Kevlar mitigates 50% of non-headshot damage, draining armor by the
     // absorbed half; headshots and armorless hits go straight to health.
@@ -31,7 +35,9 @@ export class PlayerState {
       this.armor = Math.max(0, this.armor - (original - dmg));
       }
     this.health -= dmg;
-    events.emit('hit', { target: 'player', damage: dmg, headshot });
+    const fromX = fromPos ? fromPos.x : null;
+    const fromZ = fromPos ? fromPos.z : null;
+    events.emit('hit', { target: 'player', damage: dmg, headshot, fromX, fromZ });
     if (this.health <= 0) {
       this.health = 0;
       this.alive = false;

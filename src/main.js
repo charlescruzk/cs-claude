@@ -111,7 +111,7 @@ net.onHit = (hit) => {
   if (!hit || !net.id || hit.to !== net.id) return;
   const from = remotePlayers.get(hit.id);
   player.takeDamage(hit.damage, hit.headshot, weaponData[hit.weapon] || null,
-    (from && from.name) || hit.id || 'peer');
+    (from && from.name) || hit.id || 'peer', (from && from.pos) || null);
 };
 
 // The lobby panel. It lives inside #lock-overlay, so it is only reachable on the
