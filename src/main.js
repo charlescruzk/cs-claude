@@ -117,6 +117,13 @@ net.onHit = (hit) => {
 const netMenu = new NetMenu({
   net,
   defaultName: 'player',
+  // Join is the only action that may surface anything network-related: before it,
+  // no status line, socket state, or peer is visible to a player who never asked
+  // for multiplayer. The onStatus wrapper below stays silent until this fires.
+  onJoin: (room, name) => {
+    joinAttempted = true;
+    return net.connect(room, name);
+  },
   // The menu's own Leave path calls disconnect(), which closes the socket quietly
   // and so never reports 'closed'; drop the peers here or their hit boxes survive.
   onLeave: () => { net.disconnect(); remotePlayers.clear(); },
@@ -125,7 +132,11 @@ const netMenu = new NetMenu({
 // 'connected'/'closed' is the one machine-readable signal the client gives for a
 // session starting and ending, and the panel only colours the kinds 'ok'/'err'.
 const menuStatus = net.onStatus;
+let joinAttempted = false;
 net.onStatus = (text, kind) => {
+  // With no room joined there is no connection state to report: any message that
+  // arrived before the player pressed Join is not theirs to see.
+  if (!joinAttempted) return;
   if (kind === 'connected') {
     remotePlayers.clear();          // drop anything left over from a previous room
     remotePlayers.setLocalId(net.id); // we are never our own target

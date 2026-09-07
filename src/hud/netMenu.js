@@ -27,11 +27,14 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 // z-index/transform/opacity so it creates no stacking context, which means this child
 // is positioned in the root context and 7 puts it above every existing layer.
 const CSS = `
-#net-menu { position: fixed; left: 50%; top: 50%; z-index: 7;
-            transform: translate(-50%, 64px); cursor: default;
-            background: rgba(20,22,28,.94); border: 1px solid rgba(255,255,255,.12);
-            padding: 14px 18px; min-width: 300px; color: #fff;
-            font: 13px/1.5 monospace; letter-spacing: normal; text-align: left; }
+#net-menu { position: fixed; right: 18px; bottom: 18px; z-index: 7;
+            width: 240px; cursor: default; text-align: left; }
+#net-menu .nm-body { display: none; }
+#net-menu.open .nm-body { display: block; }
+#net-menu .nm-toggle { width: 100%; padding: 8px 10px; font: 12px/1 monospace;
+                       letter-spacing: .12em; text-transform: uppercase; cursor: pointer;
+                       background: rgba(0,0,0,.55); color: #a8a59c; border: 1px solid #333; }
+#net-menu .nm-toggle:hover { color: #e8e6e0; }
 #net-menu .nm-hd { font: 700 13px/1 monospace; letter-spacing: .12em;
                    text-transform: uppercase; opacity: .8; margin-bottom: 12px; }
 #net-menu .nm-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
@@ -100,16 +103,18 @@ export class NetMenu {
     const root = document.createElement('div');
     root.id = 'net-menu';
     root.innerHTML = `
-      <div class="nm-hd">Multiplayer</div>
-      <div class="nm-row"><span class="nm-lbl">Name</span>
-        <input id="nm-name" type="text" maxlength="16" spellcheck="false"
-               autocomplete="off" placeholder="player"></div>
-      <div class="nm-row"><span class="nm-lbl">Room</span>
-        <input id="nm-room" type="text" maxlength="8" spellcheck="false"
-               autocomplete="off" placeholder="ABCD">
-        <button class="nm-new" id="nm-new" type="button">New</button></div>
-      <button class="nm-go" id="nm-go" type="button">Join</button>
-      <div class="nm-status" id="nm-status">Offline — single-player</div>`;
+      <button class="nm-toggle" id="nm-toggle" type="button">Multiplayer &#9656;</button>
+      <div class="nm-body">
+        <div class="nm-row"><span class="nm-lbl">Name</span>
+          <input id="nm-name" type="text" maxlength="16" spellcheck="false"
+                 autocomplete="off" placeholder="player"></div>
+        <div class="nm-row"><span class="nm-lbl">Room</span>
+          <input id="nm-room" type="text" maxlength="8" spellcheck="false"
+                 autocomplete="off" placeholder="ABCD">
+          <button class="nm-new" id="nm-new" type="button">New</button></div>
+        <button class="nm-go" id="nm-go" type="button">Join</button>
+        <div class="nm-status" id="nm-status"></div>
+      </div>`;
     host.appendChild(root);
 
     this.root = root;
@@ -118,11 +123,20 @@ export class NetMenu {
     this.newEl = root.querySelector('#nm-new');
     this.goEl = root.querySelector('#nm-go');
     this.statusEl = root.querySelector('#nm-status');
+    this.toggleEl = root.querySelector('#nm-toggle');
 
     this.nameEl.value = saved.name || defaultName;
     this.roomEl.value = saved.room || randomRoomCode();
 
     this._trapEvents(root);
+
+    // The toggle owns the 'open' class that shows the body. Its click must stop
+    // propagation too: it is a button inside the panel, and a bare click would
+    // otherwise reach #lock-overlay's requestLock handler once the panel is open.
+    this.toggleEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.root.classList.toggle('open');
+    });
 
     // Room codes are case-insensitive on the wire; normalise as it is typed so two
     // players who type "abcd" and "ABCD" land in the same room.
