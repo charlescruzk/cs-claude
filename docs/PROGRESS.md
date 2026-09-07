@@ -35,6 +35,37 @@ attempts (write what you tried). Add a one-line note per task.
   toward the target (`1 - exp(-dt/0.06)`, same pattern as the scope FOV). `spawnAt()` still
   sets both directly.
 
+## PHASE2_STAGE_A — RUN A2 (2026-09-06) — draw calls, shadows, render resolution
+
+- [x] Task 3 — merge static geometry per material with UV-baked texel density.
+  `mapBuilder.js` now groups `mapData.boxes` by `tex` kind, builds one `BoxGeometry` per
+  box, scales each face's UVs so one tile covers 2 m (face order +X,-X,+Y,-Y,+Z,-Z; scales
+  d/2·h/2, w/2·d/2, w/2·h/2), translates to world space, and `mergeGeometries` per kind →
+  one mesh per texture kind (3 meshes). Material `map` and `roughnessMap` repeat reset to
+  1×1 (UVs carry the tiling; both maps, or the grain would double-tile). **Colliders are
+  built in the first loop over `mapData.boxes`, same order, same values, fully independent
+  of the meshes** — verified by reading, not by the probe. Floor: `floorTex.repeat.set(30,30)`
+  removed (it mutated the shared cached texture); the floor plane's UVs are scaled by
+  31/4 = 7.75 so one tile still covers 2 m with the cached 4×4 repeat, and the shared
+  texture is left untouched.
+- [x] Task 4 — sun shadow mapping with a fitted ortho frustum. `engine.js` enables
+  `PCFSoftShadowMap`, `sun.castShadow`, 2048 map, ortho frustum fitted to ±35 (world x/z are
+  ±30.5), bias -0.0005 / normalBias 0.02. Merged map meshes get `castShadow` +
+  `receiveShadow`; the floor gets `receiveShadow` only; bot body/head/nose get both.
+- [x] Task 5 — render at 1× device pixel ratio with a `?rs=` override. `engine.js` now
+  defaults `setPixelRatio(1)` (Retina was ~4× the pixels; every screen-space effect scales
+  with it); `?rs=2` restores the old behaviour for comparison. `_onResize` unchanged — the
+  pixel ratio persists, so no re-apply there. Edges look slightly softer at 1× until SMAA
+  lands — expected, not compensated.
+
+**Verification (RUN A2):** `npm run check` 28/28; `npm run probe` exception-free with every
+P1-1..P1-7 behaviour block green. **The probe cannot see an image or measure a frame.** By
+reading: collider list is unchanged (built from `mapData.boxes` independently of the merged
+meshes) and every box is translated to its original position, so layout and collision are
+unchanged. Needs a human by eye: draw-call count (`renderer.info.render.calls` should drop
+from ~45 to well under 12), texel density consistent on a 61 m wall vs a 1 m crate, grounded
+shadows with no acne / no peter-panning, and the softer 1× edges vs `?rs=2`.
+
 ## PHASE2_STAGE_A — RUN A1 (2026-09-06) — PBR materials and renderer output
 
 - [x] Task 1 — PBR materials with procedural roughness maps. `textures.js` gained
