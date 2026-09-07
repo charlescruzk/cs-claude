@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeComposer } from '../render/composer.js';
 
 // Counter-Strike quotes FOV horizontally; Three.js wants it vertically. Converting
 // at runtime keeps the horizontal FOV constant no matter the window's aspect, which
@@ -69,6 +70,11 @@ export class Engine {
     this.sun.shadow.bias = -0.0005;
     this.sun.shadow.normalBias = 0.02;
 
+    // Post-processing stack (SMAA + tone mapping via OutputPass). `?post=0` skips
+    // it entirely — the escape hatch for bisecting a rendering problem.
+    this.composer = new URLSearchParams(location.search).get('post') === '0' ? null : makeComposer(this);
+    this._postOn = this.composer !== null;
+
     this._onResize = this._onResize.bind(this);
     window.addEventListener('resize', this._onResize);
 
@@ -86,6 +92,9 @@ export class Engine {
     this.camera.fov = vFovFor(BASE_HFOV, this.camera.aspect);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // The composer's targets must track the renderer's drawing buffer, or the
+    // image stretches on any window change.
+    if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 
   // Start the loop. `updateFn(dt)` runs once per frame with dt clamped to 0.1s,
@@ -113,7 +122,14 @@ export class Engine {
           if (this.onError) this.onError(err);
           }
         }
-    this.renderer.render(this.scene, this.camera);
+    this._render();
+  }
+
+  // Render through the composer when present, else straight to the canvas. The
+  // `?post=0` escape hatch and the Effects=Off setting both land here.
+  _render() {
+    if (this.composer && this._postOn) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   stop() {
