@@ -23,6 +23,11 @@ import { ProjectileManager } from './game/projectile.js';
 import { Tactical } from './weapons/tactical.js';
 import { Effects } from './game/effects.js';
 import { spawnFor } from './game/teams.js';
+import { NetClient } from './net/netClient.js';
+import { RemotePlayers } from './net/remotePlayers.js';
+import { packFlags } from './net/protocol.js';
+import { NetMenu } from './hud/netMenu.js';
+import { weaponData, WEAPON_KEYS } from './weapons/weaponData.js';
 import { debugEnabled, makeFpsCounter, makeColliderBoxes, makeFrameWatchdog,
          diagEnabled, makeDiagPanel } from './core/debug.js';
 
@@ -70,6 +75,81 @@ const botManager = new BotManager(engine.scene, map.spawns);
 const weapon = new Weapon('pistol');
 const viewmodel = new Viewmodel(engine.camera, controller, weapon);
 
+// --- Multiplayer (opt-in) ----------------------------------------------------
+// Nothing here touches the network until someone joins a room from the panel on
+// the pause screen: the client opens no socket on construction, RemotePlayers is
+// empty, and every per-frame call below is a guarded no-op. Single-player must
+// behave exactly as it did before this existed.
+const net = new NetClient();
+const remotePlayers = new RemotePlayers(engine.scene);
+// The weapon key of the shot being resolved right now. resolveShot calls a remote
+// player's onHit synchronously inside the 'shot' handler below, and the weapon def
+// it is handed carries no key, so the handler parks the key here for the message.
+let shotKey = 'pistol';
+
+// A hit on a peer is deliberately NOT applied here — the victim's own client owns
+// its health. We only report what we saw. See the trust model in docs/MULTIPLAYER.md.
+remotePlayers.onHit = (id, damage, headshot) => net.sendHit(id, damage, headshot, shotKey);
+net.onPeer = (peer) => remotePlayers.add(peer);
+net.onLeft = (id) => remotePlayers.remove(id);
+net.onState = (snap) => remotePlayers.applyState(snap);
+// Damage claimed by a peer's client. `killer` is that peer's name so the killfeed
+// and scoreboard read correctly — and never the string 'player', which is what the
+// kill handler below pays money for.
+net.onHit = (hit) => {
+  // Require an explicit match. The relay only routes a hit when `to` is set; one
+  // without it falls through to broadcast and would damage every client in the room.
+  if (!hit || !net.id || hit.to !== net.id) return;
+  const from = remotePlayers.get(hit.id);
+  player.takeDamage(hit.damage, hit.headshot, weaponData[hit.weapon] || null,
+    (from && from.name) || hit.id || 'peer');
+};
+
+// The lobby panel. It lives inside #lock-overlay, so it is only reachable on the
+// pause screen and is hidden the moment the pointer locks.
+const netMenu = new NetMenu({
+  net,
+  defaultName: 'player',
+  // The menu's own Leave path calls disconnect(), which closes the socket quietly
+  // and so never reports 'closed'; drop the peers here or their hit boxes survive.
+  onLeave: () => { net.disconnect(); remotePlayers.clear(); },
+});
+// NetMenu chained itself onto net.onStatus in its constructor. Wrap that wrapper:
+// 'connected'/'closed' is the one machine-readable signal the client gives for a
+// session starting and ending, and the panel only colours the kinds 'ok'/'err'.
+const menuStatus = net.onStatus;
+net.onStatus = (text, kind) => {
+  if (kind === 'connected') {
+    remotePlayers.clear();          // drop anything left over from a previous room
+    remotePlayers.setLocalId(net.id); // we are never our own target
+  } else if (kind === 'closed') {
+    // Only a real session end clears peers. 'error' also covers recoverable cases
+    // (a failed send, a relay refusal over a healthy socket) where wiping every
+    // peer's name and team would be wrong.
+    // A dropped connection must take the meshes AND the hit boxes with it: a stale
+    // box is a bullet sponge hanging in mid-air where nobody is standing.
+    remotePlayers.clear();
+  }
+  if (menuStatus) {
+    menuStatus(text, kind === 'connected' ? 'ok'
+      : (kind === 'error' || kind === 'closed') ? 'err' : '');
+  }
+};
+
+// Bots plus peers in one array for resolveShot. Rebuilt once per shot, never per
+// pellet (a shotgun pull is 8), and skipped entirely while offline so the
+// single-player shot path allocates and copies nothing.
+const _shotTargets = [];
+function shotTargets() {
+  const bots = botManager.targets();
+  const remotes = remotePlayers.targets();
+  if (remotes.length === 0) return bots;
+  _shotTargets.length = 0;
+  for (const b of bots) _shotTargets.push(b);
+  for (const r of remotes) _shotTargets.push(r);
+  return _shotTargets;
+}
+
 // Scratch vectors for the per-pellet fan-out, reused each shot (no per-pellet alloc).
 const _shotBase = new THREE.Vector3();
 const _shotDir = new THREE.Vector3();
@@ -80,6 +160,11 @@ events.on('shot', (p) => {
   engine.camera.getWorldDirection(_shotBase);
   const pellets = p.pellets || 1;
   const s = weapon.currentSpread;
+  // The weapon def carries no key; the live Weapon does. One shot message per
+  // pull, not per pellet — peers only need to know we fired.
+  shotKey = WEAPON_KEYS[weapon.index] || 'pistol';
+  if (net.connected) net.sendShot(p.origin, p.dir, shotKey);
+  const targets = shotTargets();
   for (let i = 0; i < pellets; i++) {
     _shotDir.copy(_shotBase)
       .add(_shotRand.set(
@@ -87,7 +172,7 @@ events.on('shot', (p) => {
         (Math.random() - 0.5) * 2 * s,
         (Math.random() - 0.5) * 2 * s))
       .normalize();
-    resolveShot(p.origin, _shotDir, map.colliders, botManager.targets(), p.weapon);
+    resolveShot(p.origin, _shotDir, map.colliders, targets, p.weapon);
    }
  });
 
@@ -123,7 +208,9 @@ const tactical = new Tactical(projectiles, engine.camera);
 // flash, and a flash white-out when the player has line of sight to the impact.
 const effects = new Effects({
   scene: engine.scene, colliders: map.colliders,
-  player: controller, getTargets: () => botManager.targets(),
+  // Peers as well as bots, so a frag at someone's feet actually hurts them.
+  // RemotePlayer.takeDamage reports upward instead of applying damage locally.
+  player: controller, getTargets: shotTargets,
 });
 
 // ?diag=1: a live state panel (fps/frames/locked/pointerLockElement/visibility/
@@ -133,6 +220,7 @@ const diagPanel = diagEnabled() ? makeDiagPanel(engine, input, round, controller
 window.__game = {
   engine, input, events, map, controller, player, weapon, viewmodel, botManager,
   hud, round, scoreboard, buyMenu, projectiles, tactical, effects,
+  net, remotePlayers, netMenu,
   three: THREE.REVISION,
 };
 
@@ -153,6 +241,19 @@ engine.start((dt) => {
     tactical.update(dt, input, engine.camera);
     projectiles.update(dt, map.colliders);
      }
+   // Networking runs OUTSIDE the locked gate on purpose. Inside it, one player
+   // opening the buy menu or losing pointer lock would stop sending state — their
+   // body would freeze for everyone else — and would stop interpolating peers, so
+   // the world would jump on unpause. Both calls return immediately when no room
+   // is joined, and sendState is guarded so single-player packs nothing.
+  if (net.connected) {
+    net.sendState(controller.pos, controller.yaw, controller.pitch,
+      packFlags({ crouching: controller.crouching, dead: !player.alive }));
+  }
+  net.update(dt);
+  remotePlayers.update(dt);
+   // The lobby panel is only visible while unlocked; mirror the connection there.
+  if (!input.locked) netMenu.update();
   viewmodel.update(dt);
   scoreboard.update(dt, input);
    // Effects fade the screen overlays every frame; the HUD then paints them.

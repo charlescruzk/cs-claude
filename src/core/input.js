@@ -42,6 +42,12 @@ export class Input {
 
   _bind() {
     window.addEventListener('keydown', (e) => {
+       // Typing into a field (the multiplayer room code) must not fire game
+       // actions: this listener is on window, so every keystroke would otherwise
+       // switch weapons, jump, or be swallowed by the Tab/Space preventDefault.
+       // keyup is left alone — a leaked one only clears a code from the held set.
+      const el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
        // Stop the page from scrolling / changing focus while these are held.
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) {
         e.preventDefault();

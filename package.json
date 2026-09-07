@@ -7,6 +7,8 @@
   "scripts": {
     "serve": "python3 -m http.server 8080 --bind 127.0.0.1",
     "check": "node scripts/check.mjs",
-    "probe": "node scripts/cs_probe.mjs"
+    "probe": "node scripts/cs_probe.mjs",
+    "relay": "node scripts/relay.mjs",
+    "relay:test": "node scripts/relay_test.mjs"
   }
 }
