@@ -3,6 +3,55 @@
 Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked after two
 attempts (write what you tried). Add a one-line note per task.
 
+## FIX_PROMPT_6 — RUN 1 (2026-09-06) — make single-player playable again
+
+- [x] Task 1 — collapse the multiplayer lobby into the bottom-right corner, closed by
+  default. `src/hud/netMenu.js`: `#net-menu` is now `position:fixed; right/bottom:18px`,
+  width 240px, with a `Multiplayer ▸` `.nm-toggle` above a hidden `.nm-body` (open class
+  toggles it); the toggle stops propagation so opening it cannot lock the pointer. The
+  panel no longer paints any default status text. `src/main.js`: `onStatus` is gated on a
+  `let joinAttempted` that only becomes true inside the menu's Join path, so nothing about
+  the network is visible until a player presses Join. Verified in headless Chrome at
+  1920×1080 reading the real rendered page: `#net-menu` rect (1662,945,240×30) with
+  `body{display:none}`, `overlapsTitle:false`, `overlapsPlay:false`, and a click on
+  `#lock-overlay` still calls `input.requestLock()`. Committed `deb3418` (not pushed).
+
+- [!] Task 2 — **no update-loop error exists; diagnosis matches NO listed suspect;
+  stopped per the escape clause, no code changed.** Exact `?diag=1` readout (headless
+  Chrome against a real overlay, click-on-PLAY via the real `requestPointerLock` path,
+  300 unlocked frames + 900 locked combat frames + 4 bot deaths + 300 ragdoll frames,
+  with mouse deltas injected every 10th frame and `--autoplay-policy=no-user-gesture-
+  required` so the AudioContext actually ran `state:'running'` and the real
+  `_noiseBurst`/`_tone` SFX paths executed for shots/hits/steps/lands):
+  - `#boot-status` (top-left): `three r170 — P0-8 Round loop (freeze/live/end + scoreboard)`,
+    `color:''` (the healthy green line, never red, never `UPDATE ERROR` — checked at four
+    points during the run).
+  - Cyan panel (bottom-left): `fps=60 frames=87 locked=true lockEl=game-canvas
+    visibility=visible round=end t=0.0 pos=(29.1, 0.0, -21.3) updateErrored=false`.
+  - Console: `(no code errors)`, no `Runtime.exceptionThrown`.
+  - `engine._reportedError:false` throughout; every synthetic frame-loop throw catch was
+    `null` (`firstThrow:null`, ragdoll-phase `throw:null`); `mouseDX:0 / mouseDY:0` after
+    every frame (no drift — yaw turns by exactly `delta × SENS` and stops).
+  Suspects checked in the doc's order, all clean: (1) `netMenu.update()` ran clean for 300
+  unlocked frames; (2) `net.update` guards `if (!this.connected) return;` as its first line,
+  `remotePlayers.update` iterates an empty map offline; (3) `_footsteps`→sfx exercised with
+  a *running* AudioContext — `_ok()` early-returns unless `ctx.state==='running'` and
+  `_noise`/`master` are built together in the constructor, so a null `ctx`/`_noise` cannot
+  reach a node call; (4) the ragdoll (`updateDead`) ran with 4 real bot deaths and all four
+  settled asleep with no throw. Step-3 input-path checks also clean: mousemove accumulates
+  only while `locked`, `endFrame()` is the last frame-loop call and zeroes `mouseDX/DY`,
+  `#net-menu` traps only press events (`click,mousedown,pointerdown,dblclick,contextmenu,
+  keydown` — no `mouseup`/`keyup` to latch a button), `SENS===0.0025`. **Root cause of both
+  human reports:** not the frame loop. It is the Task-1 panel regression — the panel sat on
+  top of PLAY and trapped `click`/`mousedown`/`pointerdown`, so PLAY never reached
+  `requestLock` (game can't start) while the panel hijacked focus/cursor and its New/Join
+  buttons (with the "Relay unreachable at ws://…" status a join attempt prints when the
+  relay is off, which is what the player read as "additional websocket ports") made the
+  mouse do things the player didn't ask for. Task 1 removes exactly that, and this pass
+  confirms no deeper loop/input defect remains. Since no listed suspect was actually
+  defective, per FIX_PROMPT_6 I did **not** improvise a fix; Task 3 and the push block
+  therefore did not run. HEAD stays `deb3418`.
+
 ## FIX_PROMPT_4 — RUN 1 (2026-09-06) — the blocker chain
 
 - [x] Task 1 — `exitPointerLock` is a Document method, not an Element method. `buyMenu.open()`
