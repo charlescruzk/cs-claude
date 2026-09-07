@@ -3,6 +3,48 @@
 Mark each task `[x]` when its acceptance criteria are met, `[!]` if blocked after two
 attempts (write what you tried). Add a one-line note per task.
 
+## FIX_PROMPT_9 — RUN 1 (2026-09-06) — bob the weapon, not the camera; player control
+
+- [x] Task 1 — bob moved off the camera onto the weapon. `playerController.js`: `_bobOffset()`
+  and the `BOB_VERT`/`BOB_SWAY`/`BOB_EASE` constants are gone; `syncCamera()` is now exactly
+  `camera.position.set(0, eye - landDip, 0)` / `rotation.x = pitch + recoil` — the camera never
+  moves with the stride. `_bobAmp` and `_stepDist` are kept, and `_footsteps()` now exposes
+  `this.bobAmp` (0..1, eased) and `this.bobPhase` (rad, from the same step distance as the
+  footstep audio) for the viewmodel. `viewmodel.js`: new `BOB_X`/`BOB_Y`/`BOB_ROLL` constants;
+  `update()` applies the bob as an offset on the gun's base (replacing the old
+  `gun.position.y/z` assignments — leaving them in would have overwritten the bob), so kick and
+  bob compose. Committed `debff03`.
+- [x] Task 2 — landing dip cut. `LAND_DIP_MAX` 0.09 → 0.035 m (a slight camera settle, still a
+  one-off impact cue); `LAND_DIP_HALF` untouched. The impact now reads through the weapon: the
+  viewmodel subscribes to `land` and adds `0.05 * min(1, speed/9)` to `this.kick`. Committed
+  `ca4e6c1`.
+- [x] Task 3 — mouse (FIX_PROMPT_7 Task 1, previously unrun). `input.js`: `MAX_MOVE = 180`
+  clamps OS-artefact deltas (focus change, display switch), `LOCK_SETTLE = 2` discards the
+  first mousemoves after pointer lock engages (Chrome's first delta can carry the jump from
+  the old cursor position), and non-finite deltas are dropped. The settle counter arms in the
+  `pointerlockchange` handler. Committed `1a89c8a`.
+- [x] Task 4 — settings panel (FIX_PROMPT_7 Task 2, previously unrun, plus weapon bob).
+  `playerController.js`: `this.sens = SENS` (default kept) and `this.invertY = false`;
+  `look()` reads `this.sens` and negates the pitch delta when invert-Y is on. New
+  `src/hud/settingsMenu.js` mirrors netMenu.js: built from JS, appended into `#lock-overlay`,
+  collapsed behind a `SETTINGS ▸` toggle bottom-left (240 px, z-index 7, no overlap with the
+  multiplayer panel or title), traps only press events. Controls — Sensitivity (0.0005–0.0080,
+  shown as a `value/0.0025` multiplier), Weapon bob (0–2.0, a `viewmodel.bobScale` multiplier;
+  0 fully disables the bob), Master volume (0–1, `audio.setVolume`), Invert Y (checkbox). All
+  apply live on `input`; one `localStorage` key, every read/write in try/catch, each value
+  validated finite-and-in-range with a default fallback. Wired in `main.js` after
+  audio/controller/viewmodel exist; added to `window.__game`. Committed `45f4e8f`.
+- [x] End-of-run verification — `npm run check` 41/41; `npm run probe` exit 0, `(no code
+  errors)`, 41/41 behaviour assertions true (P1-1..P1-7 all green). **Camera-write trace:** the
+  only writes to the camera transform in the whole codebase are `engine.js:43` (initial
+  construction) and `syncCamera()` — `position.set(0, eye - landDip, 0)` and
+  `rotation.x = pitch + recoil`. No bob-driven write remains, so the horizon cannot rise and
+  fall with the stride; the bob lives entirely on the gun.
+- **Needs a human by eye** (the doc's own "What needs a human" item): I cannot open a real
+  browser in this environment, so the walk test — horizon perfectly steady while walking, the
+  weapon moving, and weapon bob at 0 stopping it entirely — is confirmed at the code level
+  (trace above) but must be confirmed by eye. The probe cannot judge feel.
+
 ## FIX_PROMPT_8 — RUN 1 (2026-09-06) — field of view, walk feel, and a real level
 
 - [x] Task 1 — FOV is now horizontal-correct. Three.js `PerspectiveCamera` takes a VERTICAL
