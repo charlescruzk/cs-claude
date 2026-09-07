@@ -9,6 +9,10 @@ attempts (write what you tried). Add a one-line note per task.
   now calls `document.exitPointerLock()` (was `this.input.canvas.exitPointerLock()`, which
   threw a TypeError on every `B` press and skipped `input.endFrame()` every frame — the
   camera spun and the panel toggled every frame).
+- [x] Task 2 — probe stubs `exitPointerLock` on `Document` (not `Element`) so a wrong call
+  site fails. Confirmed the probe can fail: with the old broken call temporarily restored in
+  `buyMenu.js:46`, `npm run probe` reported the P1-4 buy block as `undefined` (the `open()`
+  TypeError), then the fix was restored.
 
 ## RESUME — 2026-09-06 (diagnostic pass, `docs/FIX_PROMPT_2.md`)
 

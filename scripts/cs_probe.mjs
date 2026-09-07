@@ -88,7 +88,10 @@ async function main() {
      "Object.defineProperty(document, 'pointerLockElement', { configurable: true, get() { return document._plEl; } });",
      "const _rq = function () { document._plEl = this; document.dispatchEvent(new Event('pointerlockchange')); };",
      "const _ex = function () { document._plEl = null; document.dispatchEvent(new Event('pointerlockchange')); };",
-     "for (const P of [Element.prototype, HTMLElement.prototype]) { P.requestPointerLock = _rq; P.exitPointerLock = _ex; }",
+     // requestPointerLock is an Element method; exitPointerLock is a Document method.
+     // Stubbing the latter onto Element lets a wrong call site pass the probe.
+     "for (const P of [Element.prototype, HTMLElement.prototype]) { P.requestPointerLock = _rq; }",
+     "Document.prototype.exitPointerLock = _ex;",
        ].join('\n') });
    await send('Page.navigate', { url: URL });
    await sleep(4500); // module load + the 1.5 s boot check
